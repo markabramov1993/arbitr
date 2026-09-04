@@ -41,7 +41,7 @@ jobs:
               'Authorization': f'Bearer {TOKEN}',
               'Accept': 'application/vnd.github+json',
               'X-GitHub-Api-Version': '2022-11-28',
-              'User-Agent': 'profit-engine-bounty-competition-radar/1.0',
+              'User-Agent': 'profit-engine-bounty-competition-radar/1.1',
           }
 
           def api(url):
@@ -188,3 +188,5 @@ jobs:
             bounty-competition-radar.json
             bounty-competition-radar.md
           retention-days: 7
+
+# FLASH manual competition-aware refresh: 2026-09-04T21:02Z
