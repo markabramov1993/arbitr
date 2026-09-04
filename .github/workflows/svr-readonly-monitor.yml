@@ -1,0 +1,48 @@
+name: Chainlink SVR Readonly Monitor
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/svr_monitor.py'
+      - '.github/workflows/svr-readonly-monitor.yml'
+  schedule:
+    - cron: '*/5 * * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: svr-readonly-monitor
+  cancel-in-progress: true
+
+jobs:
+  monitor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install websocket client
+        run: python3 -m pip install --user 'websockets>=14,<16'
+      - name: Monitor SVR auctions
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 scripts/svr_monitor.py --seconds 240 --out svr-auctions.jsonl 2>&1 | tee svr-monitor.log
+      - name: Summarize Base SVR activity
+        if: always()
+        shell: bash
+        run: |
+          grep 'MONITOR_SUMMARY' svr-monitor.log || true
+          grep '"is_base_svr":true' svr-monitor.log || true
+      - name: Upload monitor evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: svr-readonly-monitor-evidence
+          path: |
+            svr-auctions.jsonl
+            svr-monitor.log
+          retention-days: 7
