@@ -19,6 +19,22 @@ jobs:
           version: stable
       - name: Build Solidity harness
         run: forge build
+      - name: Inspect live Base SVR aggregators
+        shell: bash
+        run: |
+          set +e
+          RPC='https://mainnet.base.org'
+          for A in \
+            0x83f3425A5b32655DC645f7f4e422DD60E9741794 \
+            0xD772F6D9b7A35cb96fDdFE569964ab1C05017BF9 \
+            0xeb3Ad4395924b76eB64b3d6aBabA0B62875b1A1f; do
+            echo "=== $A ==="
+            echo -n 'description: '; cast call "$A" 'description()(string)' --rpc-url "$RPC" || true
+            echo -n 'typeAndVersion: '; cast call "$A" 'typeAndVersion()(string)' --rpc-url "$RPC" || true
+            echo -n 'decimals: '; cast call "$A" 'decimals()(uint8)' --rpc-url "$RPC" || true
+            echo -n 'latestAnswer: '; cast call "$A" 'latestAnswer()(int256)' --rpc-url "$RPC" || true
+            echo -n 'latestRoundData: '; cast call "$A" 'latestRoundData()(uint80,int256,uint256,uint256,uint80)' --rpc-url "$RPC" || true
+          done
 
   free-base-rpc:
     runs-on: ubuntu-latest
