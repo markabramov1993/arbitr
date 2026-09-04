@@ -33,8 +33,23 @@ jobs:
             echo -n 'typeAndVersion: '; cast call "$A" 'typeAndVersion()(string)' --rpc-url "$RPC" || true
             echo -n 'decimals: '; cast call "$A" 'decimals()(uint8)' --rpc-url "$RPC" || true
             echo -n 'latestAnswer: '; cast call "$A" 'latestAnswer()(int256)' --rpc-url "$RPC" || true
-            echo -n 'latestRoundData: '; cast call "$A" 'latestRoundData()(uint80,int256,uint256,uint256,uint80)' --rpc-url "$RPC" || true
           done
+      - name: Project Morpho positions from captured SVR medians
+        shell: bash
+        run: |
+          set +e
+          echo '=== ETH/USD 18-dec SVR feed ==='
+          python3 scripts/svr_morpho_opportunity.py \
+            --aggregator 0x83f3425A5b32655DC645f7f4e422DD60E9741794 \
+            --median 2511126115973709000000 --feed-decimals 18
+          echo '=== ETH/USD 8-dec SVR feed ==='
+          python3 scripts/svr_morpho_opportunity.py \
+            --aggregator 0xD772F6D9b7A35cb96fDdFE569964ab1C05017BF9 \
+            --median 251114474568 --feed-decimals 8
+          echo '=== high-value 18-dec SVR feed ==='
+          python3 scripts/svr_morpho_opportunity.py \
+            --aggregator 0xeb3Ad4395924b76eB64b3d6aBabA0B62875b1A1f \
+            --median 80839263468990000000000 --feed-decimals 18
 
   free-base-rpc:
     runs-on: ubuntu-latest
