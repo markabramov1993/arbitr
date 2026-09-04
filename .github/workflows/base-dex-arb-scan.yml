@@ -7,6 +7,7 @@ on:
       - 'scripts/base_dex_arb_scan.py'
       - 'scripts/base_dex_spread_quick.py'
       - 'scripts/cbbtc_focused_quote.py'
+      - 'test/CbBtcArbFork.t.sol'
       - '.github/workflows/base-dex-arb-scan.yml'
   workflow_dispatch:
 
@@ -14,21 +15,23 @@ permissions:
   contents: read
 
 jobs:
-  focused-cbbtc:
+  cbBTC-fork:
     runs-on: ubuntu-24.04
-    timeout-minutes: 4
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           version: stable
-      - name: Quote cbBTC Uniswap-Aerodrome roundtrips
+      - name: Build
+        run: forge build
+      - name: Execute real Uniswap to Aerodrome swaps on Base fork
         shell: bash
-        run: python3 scripts/cbbtc_focused_quote.py | tee cbbtc-focused-quote.jsonl
+        run: forge test --match-contract CbBtcArbForkTest -vv | tee cbbtc-fork.txt
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cbbtc-focused-quote-evidence
-          path: cbbtc-focused-quote.jsonl
+          name: cbbtc-fork-evidence
+          path: cbbtc-fork.txt
           retention-days: 30
