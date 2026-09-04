@@ -1,0 +1,137 @@
+name: Base Morpho Auto Liquidation Watch
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - '.github/workflows/base-morpho-auto-liquidation-watch.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: base-morpho-auto-liquidation-watch
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Discover listed WETH debt candidates, fork-test liquidate, quote collateral exit
+        shell: bash
+        run: |
+          set -euo pipefail
+          REMOTE='https://base-mainnet.g.alchemy.com/public'
+          LOCAL='http://127.0.0.1:8545'
+          API='https://api.morpho.org/graphql'
+          MORPHO='0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb'
+          WETH='0x4200000000000000000000000000000000000006'
+          QUOTER='0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a'
+          FACTORY='0x33128a8fC17869897dcE68Ed026d694621f6FDfD'
+          EOA='0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
+          MAX='0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+          python3 - <<'PY' >/tmp/candidates.tsv
+          import json, urllib.request, time
+          API='https://api.morpho.org/graphql'
+          WETH='0x4200000000000000000000000000000000000006'.lower()
+          def gql(q):
+              req=urllib.request.Request(API,data=json.dumps({'query':q}).encode(),headers={'content-type':'application/json','user-agent':'profit-engine-auto-watch'})
+              with urllib.request.urlopen(req,timeout=30) as r:o=json.loads(r.read())
+              if o.get('errors'): raise RuntimeError(o['errors'])
+              return o['data']
+          q='''query { markets(first: 60, orderBy: SupplyAssetsUsd, orderDirection: Desc, where: { chainId_in: [8453], listed: true }) { items { marketId lltv loanAsset { address symbol decimals } collateralAsset { address symbol decimals } oracle { address } irmAddress } } }'''
+          rows=[]
+          for m in gql(q)['markets']['items']:
+              if m['loanAsset']['address'].lower()!=WETH: continue
+              mid=m['marketId']; lltv=int(m['lltv'])/1e18
+              pq=f'''query {{ marketPositions(first: 80, orderBy: BorrowShares, orderDirection: Desc, where: {{ marketUniqueKey_in: ["{mid}"] }}) {{ items {{ user {{ address }} state {{ borrowShares borrowAssetsUsd collateral collateralUsd }} }} }} }}'''
+              try: ps=gql(pq)['marketPositions']['items']
+              except Exception: continue
+              for p in ps:
+                  s=p['state']; debt=float(s.get('borrowAssetsUsd') or 0); coll=float(s.get('collateralUsd') or 0)
+                  if debt<=0 or coll<=0: continue
+                  hf=coll*lltv/debt
+                  if hf<=1.0025:
+                      rows.append((hf,debt,mid,p['user']['address'],m['loanAsset']['address'],m['collateralAsset']['address'],m['oracle']['address'],m['irmAddress'],m['lltv'],m['collateralAsset']['symbol']))
+              time.sleep(.02)
+          rows.sort(key=lambda x:(x[0],-x[1]))
+          for r in rows[:20]: print('\t'.join(map(str,r)))
+          PY
+
+          COUNT=$(wc -l </tmp/candidates.tsv | tr -d ' ')
+          echo "API_CANDIDATES=$COUNT"
+          cat /tmp/candidates.tsv || true
+          if [ "$COUNT" = '0' ]; then echo 'NO_NEAR_LIQUIDATION_WETH_POSITION'; exit 0; fi
+
+          anvil --fork-url "$REMOTE" --chain-id 8453 --port 8545 --silent >/tmp/anvil.log 2>&1 &
+          ANVIL_PID=$!
+          trap 'kill $ANVIL_PID 2>/dev/null || true' EXIT
+          for i in {1..30}; do cast block-number --rpc-url "$LOCAL" >/dev/null 2>&1 && break; sleep 1; done
+          echo "FORK_BLOCK=$(cast block-number --rpc-url "$LOCAL")"
+
+          cast send "$WETH" 'deposit()' --value 1000ether --from "$EOA" --unlocked --rpc-url "$LOCAL" >/dev/null
+          cast send "$WETH" 'approve(address,uint256)' "$MORPHO" "$MAX" --from "$EOA" --unlocked --rpc-url "$LOCAL" >/dev/null
+          GAS_PRICE=$(cast gas-price --rpc-url "$REMOTE" | awk '{print $1}')
+          FOUND=0
+
+          while IFS=$'\t' read -r HF DEBT MARKET BORROWER LOAN COLL ORACLE IRM LLTV SYMBOL; do
+            [ -z "$MARKET" ] && continue
+            POS=$(cast call "$MORPHO" 'position(bytes32,address)(uint256,uint128,uint128)' "$MARKET" "$BORROWER" --rpc-url "$LOCAL" 2>/dev/null || true)
+            SHARES=$(printf '%s\n' "$POS" | sed -n '2p' | awk '{print $1}')
+            [ -z "$SHARES" ] && continue
+            [ "$SHARES" = '0' ] && continue
+            COLL_BEFORE=$(cast call "$COLL" 'balanceOf(address)(uint256)' "$EOA" --rpc-url "$LOCAL" 2>/dev/null | awk '{print $1}' || echo 0)
+            WETH_BEFORE=$(cast call "$WETH" 'balanceOf(address)(uint256)' "$EOA" --rpc-url "$LOCAL" | awk '{print $1}')
+
+            set +e
+            LIQ=$(cast send "$MORPHO" 'liquidate((address,address,address,address,uint256),address,uint256,uint256,bytes)' "($LOAN,$COLL,$ORACLE,$IRM,$LLTV)" "$BORROWER" 0 "$SHARES" 0x --from "$EOA" --unlocked --rpc-url "$LOCAL" --json 2>&1)
+            RC=$?
+            set -e
+            if [ "$RC" -ne 0 ]; then
+              echo "NOT_EXECUTABLE hf_api=$HF debt_usd=$DEBT market=$MARKET borrower=$BORROWER reason=$(echo "$LIQ" | grep -o 'position is healthy' | head -1 || true)"
+              continue
+            fi
+
+            WETH_AFTER=$(cast call "$WETH" 'balanceOf(address)(uint256)' "$EOA" --rpc-url "$LOCAL" | awk '{print $1}')
+            COLL_AFTER=$(cast call "$COLL" 'balanceOf(address)(uint256)' "$EOA" --rpc-url "$LOCAL" | awk '{print $1}')
+            SPENT=$((WETH_BEFORE-WETH_AFTER))
+            SEIZED=$((COLL_AFTER-COLL_BEFORE))
+            BEST_OUT=0; BEST_FEE=0
+            for FEE in 100 500 3000 10000; do
+              POOL=$(cast call "$FACTORY" 'getPool(address,address,uint24)(address)' "$COLL" "$WETH" "$FEE" --rpc-url "$LOCAL" 2>/dev/null || true)
+              [ "$POOL" = '0x0000000000000000000000000000000000000000' ] && continue
+              set +e
+              Q=$(cast call "$QUOTER" 'quoteExactInputSingle((address,address,uint256,uint24,uint160))(uint256,uint160,uint32,uint256)' "($COLL,$WETH,$SEIZED,$FEE,0)" --rpc-url "$LOCAL" 2>/dev/null)
+              QRC=$?
+              set -e
+              if [ "$QRC" -eq 0 ]; then
+                OUT=$(printf '%s\n' "$Q" | sed -n '1p' | awk '{print $1}')
+                if [ "$OUT" -gt "$BEST_OUT" ]; then BEST_OUT=$OUT; BEST_FEE=$FEE; fi
+              fi
+            done
+
+            python3 - "$HF" "$DEBT" "$MARKET" "$BORROWER" "$SYMBOL" "$SPENT" "$SEIZED" "$BEST_OUT" "$BEST_FEE" "$GAS_PRICE" <<'PY'
+          import sys
+          hf=float(sys.argv[1]); debt=float(sys.argv[2]); market=sys.argv[3]; borrower=sys.argv[4]; symbol=sys.argv[5]
+          spent,seized,out,fee,gas=map(int,sys.argv[6:])
+          gross=out-spent
+          reserve=900_000*gas + 5_000_000_000_000_000
+          net=gross-reserve
+          print(f'FORK_LIQUIDATION_SUCCESS hf_api={hf:.8f} debt_usd={debt:.2f} market={market} borrower={borrower} collateral={symbol}')
+          print(f'REPAID_WETH={spent/1e18:.9f} SEIZED_COLLATERAL={seized/1e18:.9f} EXIT_WETH={out/1e18:.9f} BEST_FEE={fee}')
+          print(f'GROSS_WETH={gross/1e18:.9f} NET_AFTER_RESERVE_WETH={net/1e18:.9f}')
+          print('EXECUTABLE_CANDIDATE=' + ('true' if out>0 and net>0 else 'false'))
+          PY
+            FOUND=$((FOUND+1))
+          done </tmp/candidates.tsv
+
+          echo "FORK_LIQUIDATIONS_SUCCEEDED=$FOUND"
