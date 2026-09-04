@@ -1,0 +1,86 @@
+name: 0x Settler Immunefi Readonly Security Scan
+
+on:
+  push:
+    paths:
+      - '.github/workflows/zeroex-immunefi-security-scan.yml'
+  schedule:
+    - cron: '7 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout Profit Engine
+        uses: actions/checkout@v4
+
+      - name: Checkout fresh 0x Settler upstream
+        run: |
+          git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/0xProject/0x-settler.git zeroex-settler
+          cd zeroex-settler
+          git rev-parse HEAD | tee ../zeroex-upstream-sha.txt
+
+      - name: Install 0x-pinned Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.5.1
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Slither
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install slither-analyzer
+          forge --version
+          slither --version
+
+      - name: Build upstream contracts
+        id: build
+        working-directory: zeroex-settler
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          forge build 2>&1 | tee ../zeroex-forge-build.log
+
+      - name: Run Slither on production repository
+        id: slither
+        if: steps.build.outcome == 'success'
+        working-directory: zeroex-settler
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          slither . --compile-force-framework foundry --exclude-low --exclude-informational 2>&1 | tee ../zeroex-slither.log
+
+      - name: Summarize evidence
+        if: always()
+        run: |
+          echo "UPSTREAM_SHA=$(cat zeroex-upstream-sha.txt 2>/dev/null || echo unknown)"
+          echo "BUILD_OUTCOME=${{ steps.build.outcome }}"
+          echo "SLITHER_OUTCOME=${{ steps.slither.outcome }}"
+          echo '--- security signal summary ---'
+          if [ -f zeroex-slither.log ]; then
+            grep -Ei '(high|medium|reentr|arbitrary|delegatecall|uninitialized|controlled|selfdestruct|signature|permit|call.value|assembly|unchecked|oracle|price)' zeroex-slither.log | tail -n 200 || true
+          else
+            echo 'No Slither log produced.'
+          fi
+          echo '--- end summary ---'
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zeroex-immunefi-readonly-scan
+          path: |
+            zeroex-upstream-sha.txt
+            zeroex-forge-build.log
+            zeroex-slither.log
+          retention-days: 14
+          if-no-files-found: warn
