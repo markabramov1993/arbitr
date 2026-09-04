@@ -74,8 +74,6 @@ jobs:
             SHARES=$(printf '%s\n' "$POS" | sed -n '2p' | awk '{print $1}')
             [ -n "$SHARES" ] && [ "$SHARES" != 0 ] || continue
 
-            # No loan-token funding or approval is provided. A healthy position fails at Morpho's
-            # health check; an unhealthy position advances beyond that point and fails later on repayment.
             set +e
             PROBE=$(cast send "$MORPHO" 'liquidate((address,address,address,address,uint256),address,uint256,uint256,bytes)' \
               "($LOAN,$COLL,$ORACLE,$IRM,$LLTV)" "$BORROWER" 0 "$SHARES" 0x \
@@ -90,7 +88,6 @@ jobs:
               echo "UNEXPECTED_PROBE_SUCCESS market=$MARKET borrower=$BORROWER"
               continue
             fi
-            # Reaching any non-health revert means Morpho did not reject the position as healthy.
             REASON=$(echo "$PROBE" | tr '\n' ' ' | sed 's/\t/ /g' | cut -c1-260)
             echo "UNHEALTHY_NOW api_hf=$HF debt_usd=$DEBT_USD loan=$LOAN_SYMBOL collateral=$COLL_SYMBOL market=$MARKET borrower=$BORROWER reason=$REASON"
             printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$HF" "$MARKET" "$BORROWER" "$LOAN" "$LOAN_SYMBOL" "$LOAN_DEC" "$COLL" "$COLL_SYMBOL" "$COLL_DEC" "$ORACLE" "$IRM" "$LLTV" "$DEBT_USD" "$SHARES" >>/tmp/unhealthy.tsv
@@ -98,3 +95,5 @@ jobs:
 
           echo "UNHEALTHY_COUNT=$(wc -l </tmp/unhealthy.tsv | tr -d ' ')"
           cat /tmp/unhealthy.tsv
+
+# FLASH manual current-state refresh: 2026-09-04T20:44Z
