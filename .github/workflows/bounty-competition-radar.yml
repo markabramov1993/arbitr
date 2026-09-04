@@ -1,0 +1,186 @@
+name: Bounty Competition Radar
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '41 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bounty-competition-radar.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Rank fresh funded GitHub bounty issues by competition
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import datetime as dt
+          import json
+          import os
+          import re
+          import urllib.parse
+          import urllib.request
+          from pathlib import Path
+
+          TOKEN = os.environ['GH_TOKEN']
+          headers = {
+              'Authorization': f'Bearer {TOKEN}',
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'User-Agent': 'profit-engine-bounty-competition-radar/1.0',
+          }
+
+          def api(url):
+              req = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  return json.load(r)
+
+          since = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=3)).date().isoformat()
+          q = f'is:issue is:open created:>={since} bounty in:title'
+          url = 'https://api.github.com/search/issues?' + urllib.parse.urlencode({
+              'q': q,
+              'sort': 'created',
+              'order': 'desc',
+              'per_page': 50,
+          })
+          search = api(url)
+
+          amount_patterns = [
+              re.compile(r'\$\s*([0-9][0-9,]*(?:\.\d+)?)', re.I),
+              re.compile(r'([0-9][0-9,]*(?:\.\d+)?)\s*(?:USDC|USDG|USD)\b', re.I),
+          ]
+
+          def reward_from(text):
+              vals = []
+              for pat in amount_patterns:
+                  for m in pat.finditer(text or ''):
+                      try:
+                          vals.append(float(m.group(1).replace(',', '')))
+                      except ValueError:
+                          pass
+              return max(vals, default=0.0)
+
+          def repo_from_api_url(repository_url):
+              marker = '/repos/'
+              return repository_url.split(marker, 1)[1] if marker in repository_url else ''
+
+          def exact_issue_reference(text, number):
+              if not text:
+                  return False
+              patterns = [
+                  rf'(?<!\d)#{number}(?!\d)',
+                  rf'\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#{number}\b',
+              ]
+              return any(re.search(p, text, re.I) for p in patterns)
+
+          rows = []
+          for item in search.get('items', []):
+              repo = repo_from_api_url(item.get('repository_url', ''))
+              if not repo or repo.lower().endswith('/bountyscout'):
+                  continue
+              title = item.get('title') or ''
+              reward = reward_from(title)
+              if reward < 20 or reward > 100000:
+                  continue
+
+              number = int(item['number'])
+              assignees = len(item.get('assignees') or [])
+              comments = int(item.get('comments') or 0)
+
+              pr_q = f'repo:{repo} is:pr is:open "#{number}"'
+              pr_url = 'https://api.github.com/search/issues?' + urllib.parse.urlencode({
+                  'q': pr_q,
+                  'sort': 'created',
+                  'order': 'desc',
+                  'per_page': 20,
+              })
+              try:
+                  pr_search = api(pr_url)
+              except Exception as e:
+                  print('PR_SEARCH_ERROR', repo, number, repr(e))
+                  pr_search = {'items': []}
+
+              matching_prs = []
+              for pr in pr_search.get('items', []):
+                  text = (pr.get('title') or '') + '\n' + (pr.get('body') or '')
+                  if exact_issue_reference(text, number):
+                      matching_prs.append({
+                          'number': pr.get('number'),
+                          'url': pr.get('html_url'),
+                          'title': pr.get('title'),
+                      })
+
+              open_prs = len(matching_prs)
+              denom = 1 + (open_prs * 3) + (assignees * 3) + min(comments, 20) * 0.20
+              score = reward / denom
+              lane = 'CLEAR' if open_prs == 0 and assignees == 0 and comments <= 1 else 'CONTESTED'
+
+              rows.append({
+                  'repo': repo,
+                  'issue': number,
+                  'title': title,
+                  'url': item.get('html_url'),
+                  'reward_nominal': reward,
+                  'assignees': assignees,
+                  'comments': comments,
+                  'matching_open_prs': matching_prs,
+                  'competition': lane,
+                  'score': round(score, 2),
+                  'updated_at': item.get('updated_at'),
+              })
+
+          rows.sort(key=lambda r: (
+              r['competition'] != 'CLEAR',
+              -r['score'],
+              -r['reward_nominal'],
+          ))
+
+          out = {
+              'generated_at': dt.datetime.now(dt.timezone.utc).isoformat(),
+              'query': q,
+              'candidates': rows,
+          }
+          Path('bounty-competition-radar.json').write_text(
+              json.dumps(out, ensure_ascii=False, indent=2), encoding='utf-8'
+          )
+
+          md = ['# Bounty Competition Radar', '', f'Generated: {out["generated_at"]}', '']
+          md += ['| Lane | Reward | Score | Issue | Assignees | Comments | Open PRs |',
+                 '|---|---:|---:|---|---:|---:|---:|']
+          for r in rows[:30]:
+              md.append(
+                  f'| {r["competition"]} | ${r["reward_nominal"]:,.0f} | {r["score"]:.2f} | '
+                  f'[{r["repo"]}#{r["issue"]}]({r["url"]}) | {r["assignees"]} | '
+                  f'{r["comments"]} | {len(r["matching_open_prs"])} |'
+              )
+          Path('bounty-competition-radar.md').write_text('\n'.join(md) + '\n', encoding='utf-8')
+
+          clear = [r for r in rows if r['competition'] == 'CLEAR']
+          print('CANDIDATE_COUNT=', len(rows))
+          print('CLEAR_LANE_COUNT=', len(clear))
+          for r in clear[:15]:
+              print('CLEAR=' + json.dumps(r, ensure_ascii=False, sort_keys=True))
+
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as f:
+              f.write('\n'.join(md) + '\n')
+          PY
+
+      - name: Upload radar snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bounty-competition-radar
+          path: |
+            bounty-competition-radar.json
+            bounty-competition-radar.md
+          retention-days: 7
