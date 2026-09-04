@@ -1,0 +1,83 @@
+name: Morpho Top cbXRP Historical Exit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - '.github/workflows/morpho-top-cbxrp-exit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Inspect winning transaction and historical Uniswap liquidity
+        shell: bash
+        run: |
+          set -euo pipefail
+          RPC='https://base-mainnet.g.alchemy.com/public'
+          BLOCK=50774916
+          TX='0xd5b587661551663ad6fb49f9dc99f5a98cdbe24abb4aa9de49ab6481cd6fffb3'
+          CBXRP='0xcb585250f852C6c6bf90434AB21A00f02833a4af'
+          USDC='0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+          WETH='0x4200000000000000000000000000000000000006'
+          V3_FACTORY='0x33128a8fC17869897dcE68Ed026d694621f6FDfD'
+          V3_QUOTER='0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a'
+          V2_FACTORY='0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6'
+          V2_ROUTER='0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24'
+          # Sum of the two cbXRP liquidation events in this tx from Morpho API.
+          AMOUNT=150346774279
+          {
+            echo '=== TRANSACTION ==='
+            cast rpc eth_getTransactionByHash "$TX" --rpc-url "$RPC"
+            echo '=== RECEIPT ==='
+            cast rpc eth_getTransactionReceipt "$TX" --rpc-url "$RPC"
+            echo '=== BYTECODE OF TX TO ==='
+            TO=$(cast rpc eth_getTransactionByHash "$TX" --rpc-url "$RPC" | python3 -c 'import sys,json; print(json.load(sys.stdin)["to"])')
+            echo "TO=$TO"
+            cast code "$TO" --block "$BLOCK" --rpc-url "$RPC" | head -c 500 || true
+            echo
+            INPUT=$(cast rpc eth_getTransactionByHash "$TX" --rpc-url "$RPC" | python3 -c 'import sys,json; print(json.load(sys.stdin)["input"])')
+            echo "SELECTOR=${INPUT:0:10}"
+            cast 4byte "${INPUT:0:10}" || true
+            echo '=== UNIQUE LOG ADDRESSES ==='
+            cast rpc eth_getTransactionReceipt "$TX" --rpc-url "$RPC" | python3 -c 'import sys,json; r=json.load(sys.stdin); print("\n".join(sorted(set(x["address"] for x in r["logs"]))))'
+            echo '=== V2 DIRECT PAIRS ==='
+            echo -n 'cbXRP/USDC: '
+            cast call "$V2_FACTORY" 'getPair(address,address)(address)' "$CBXRP" "$USDC" --block "$BLOCK" --rpc-url "$RPC" || true
+            echo -n 'cbXRP/WETH: '
+            cast call "$V2_FACTORY" 'getPair(address,address)(address)' "$CBXRP" "$WETH" --block "$BLOCK" --rpc-url "$RPC" || true
+            echo '=== V3 DIRECT POOLS ==='
+            for FEE in 100 500 3000 10000; do
+              echo -n "cbXRP/USDC fee=$FEE: "
+              cast call "$V3_FACTORY" 'getPool(address,address,uint24)(address)' "$CBXRP" "$USDC" "$FEE" --block "$BLOCK" --rpc-url "$RPC" || true
+            done
+            for FEE in 100 500 3000 10000; do
+              echo -n "cbXRP/WETH fee=$FEE: "
+              cast call "$V3_FACTORY" 'getPool(address,address,uint24)(address)' "$CBXRP" "$WETH" "$FEE" --block "$BLOCK" --rpc-url "$RPC" || true
+            done
+            echo '=== V3 QUOTES WHOLE SEIZED AMOUNT ==='
+            for FEE in 100 500 3000 10000; do
+              echo "cbXRP->USDC fee=$FEE"
+              cast call "$V3_QUOTER" 'quoteExactInputSingle((address,address,uint256,uint24,uint160))(uint256,uint160,uint32,uint256)' "($CBXRP,$USDC,$AMOUNT,$FEE,0)" --block "$BLOCK" --rpc-url "$RPC" || true
+              echo "cbXRP->WETH fee=$FEE"
+              cast call "$V3_QUOTER" 'quoteExactInputSingle((address,address,uint256,uint24,uint160))(uint256,uint160,uint32,uint256)' "($CBXRP,$WETH,$AMOUNT,$FEE,0)" --block "$BLOCK" --rpc-url "$RPC" || true
+            done
+            echo '=== V2 ROUTER DIRECT QUOTES WHOLE SEIZED AMOUNT ==='
+            cast call "$V2_ROUTER" 'getAmountsOut(uint256,address[])(uint256[])' "$AMOUNT" "[$CBXRP,$USDC]" --block "$BLOCK" --rpc-url "$RPC" || true
+            cast call "$V2_ROUTER" 'getAmountsOut(uint256,address[])(uint256[])' "$AMOUNT" "[$CBXRP,$WETH]" --block "$BLOCK" --rpc-url "$RPC" || true
+          } | tee cbxrp-historical-exit.txt
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbxrp-historical-exit
+          path: cbxrp-historical-exit.txt
+          retention-days: 30
