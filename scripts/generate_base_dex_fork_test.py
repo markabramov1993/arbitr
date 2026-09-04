@@ -49,7 +49,6 @@ def load_edges(path: pathlib.Path):
         rows.append(row)
     rows.sort(key=lambda r: float(r["spot_edge_bps_before_slippage_gas"]), reverse=True)
 
-    # Deduplicate exact venue/tier direction.
     out = []
     seen = set()
     for r in rows:
@@ -81,7 +80,7 @@ def render(edges) -> str:
                 spot=max(0, int(round(float(r["spot_edge_bps_before_slippage_gas"]) * 1_000_000))),
             )
         )
-    size_values = ",".join(str(x * 1_000_000) for x in SIZES)
+    size_values = ",".join(f"uint256({x * 1_000_000})" for x in SIZES)
 
     return f'''// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
@@ -110,7 +109,7 @@ contract GeneratedBaseDexArbTest is Test {{
     address constant USDC = {USDC};
     address constant UNI_ROUTER = {UNI_ROUTER};
     address constant AERO_ROUTER = {AERO_ROUTER};
-    string constant RPC = "https://base-mainnet.g.alchemy.com/public";
+    string constant RPC = "https://base-rpc.publicnode.com";
 
     struct Candidate {{
         address asset;
