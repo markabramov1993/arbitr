@@ -19,31 +19,35 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for SLUG in steve-agent-arena-launch-your-agent-and-win-500-usdc zns-sol; do
-            echo "=== $SLUG ==="
-            OK=0
-            for BASE in https://earn.superteam.fun https://superteam.fun; do
-              for PATH in "/api/listings/details/$SLUG" "/api/listings/$SLUG"; do
-                URL="$BASE$PATH"
-                HTTP=$(curl -L -sS -o /tmp/detail.json -w '%{http_code}' "$URL")
-                echo "TRY $URL -> $HTTP"
-                if [ "$HTTP" = 200 ]; then
-                  cp /tmp/detail.json "$SLUG.json"
-                  python3 - "$SLUG.json" <<'PY'
-          import json,sys
-          p=sys.argv[1]
-          d=json.load(open(p))
-          print(json.dumps(d,ensure_ascii=False,indent=2)[:60000])
+          python3 - <<'PY'
+          import json, urllib.request, urllib.error
+          slugs=['steve-agent-arena-launch-your-agent-and-win-500-usdc','zns-sol']
+          bases=['https://earn.superteam.fun','https://superteam.fun']
+          paths=['/api/listings/details/{slug}','/api/listings/{slug}']
+          for slug in slugs:
+              print('===',slug,'===')
+              found=None
+              for base in bases:
+                  for pattern in paths:
+                      url=base+pattern.format(slug=slug)
+                      try:
+                          req=urllib.request.Request(url,headers={'User-Agent':'profit-engine-public-detail/1.0'})
+                          with urllib.request.urlopen(req,timeout=20) as r:
+                              body=r.read(); status=r.status
+                      except urllib.error.HTTPError as e:
+                          status=e.code; body=e.read()
+                      except Exception as e:
+                          print('TRY',url,'-> ERROR',repr(e)); continue
+                      print('TRY',url,'->',status)
+                      if status==200:
+                          found=json.loads(body)
+                          break
+                  if found is not None: break
+              if found is None:
+                  found={'error':'detail endpoints unavailable'}
+              with open(slug+'.json','w') as f: json.dump(found,f,ensure_ascii=False,indent=2)
+              print(json.dumps(found,ensure_ascii=False,indent=2)[:60000])
           PY
-                  OK=1
-                  break 2
-                fi
-              done
-            done
-            if [ "$OK" = 0 ]; then
-              echo '{"error":"detail endpoints unavailable"}' > "$SLUG.json"
-            fi
-          done
       - name: Upload details
         if: always()
         uses: actions/upload-artifact@v4
