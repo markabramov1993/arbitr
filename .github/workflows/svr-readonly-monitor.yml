@@ -6,6 +6,8 @@ on:
     branches: [main]
     paths:
       - 'scripts/svr_monitor.py'
+      - 'scripts/svr_morpho_future_hf.py'
+      - 'scripts/analyze_svr_jsonl.py'
       - '.github/workflows/svr-readonly-monitor.yml'
   schedule:
     - cron: '*/5 * * * *'
@@ -20,7 +22,7 @@ concurrency:
 jobs:
   monitor:
     runs-on: ubuntu-24.04
-    timeout-minutes: 7
+    timeout-minutes: 8
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,12 +33,19 @@ jobs:
         run: |
           set -o pipefail
           python3 scripts/svr_monitor.py --seconds 240 --out svr-auctions.jsonl 2>&1 | tee svr-monitor.log
+      - name: Estimate pre-oracle Morpho future HF
+        if: always()
+        shell: bash
+        run: |
+          set -o pipefail
+          PYTHONPATH=scripts python3 scripts/analyze_svr_jsonl.py svr-auctions.jsonl 2>&1 | tee svr-morpho-future-hf.log
       - name: Summarize Base SVR activity
         if: always()
         shell: bash
         run: |
           grep 'MONITOR_SUMMARY' svr-monitor.log || true
-          grep '"is_base_svr":true' svr-monitor.log || true
+          grep 'BASE_PRICE_SIGNAL' svr-monitor.log || true
+          grep -E 'FUTURE_LIQUIDATION_CROSS|FUTURE_HF_SUMMARY' svr-morpho-future-hf.log || true
       - name: Upload monitor evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -45,4 +54,5 @@ jobs:
           path: |
             svr-auctions.jsonl
             svr-monitor.log
+            svr-morpho-future-hf.log
           retention-days: 7
