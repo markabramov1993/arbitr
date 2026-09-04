@@ -1,0 +1,52 @@
+name: Base Public RPC Log Range Probe
+
+on:
+  push:
+    paths:
+      - '.github/workflows/base-rpc-log-range-probe.yml'
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Probe public RPC eth_getLogs ranges
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, urllib.request, urllib.error, subprocess, time
+          endpoints=[
+            'https://base-mainnet.g.alchemy.com/public',
+            'https://mainnet.base.org',
+            'https://base-rpc.publicnode.com',
+            'https://base.drpc.org',
+          ]
+          POOL='0xA238Dd80C259a72e81d7e4664a9801593F98d1c5'
+          AAVE='0x63706e401c06ac8513145b7687A14804d17f814b'.lower()
+          TOPIC=subprocess.check_output(['cast','keccak','Borrow(address,address,address,uint256,uint8,uint256,uint16)'],text=True).strip()
+          reserve='0x'+'0'*24+AAVE[2:]
+          END=50860460
+          for url in endpoints:
+            print('ENDPOINT',url)
+            for span in [1,10,100,1000,5000,10000,50000]:
+              lo=END-span+1
+              body=json.dumps({'jsonrpc':'2.0','id':1,'method':'eth_getLogs','params':[{'address':POOL,'fromBlock':hex(lo),'toBlock':hex(END),'topics':[TOPIC,reserve]}]}).encode()
+              req=urllib.request.Request(url,data=body,headers={'Content-Type':'application/json','User-Agent':'profit-engine-rpc-probe/0.1'})
+              t=time.monotonic()
+              try:
+                with urllib.request.urlopen(req,timeout=20) as r:
+                  d=json.load(r)
+                ms=(time.monotonic()-t)*1000
+                if d.get('error'):
+                  print('SPAN',span,'RPC_ERROR',json.dumps(d['error'])[:300],round(ms,1))
+                else:
+                  print('SPAN',span,'OK','logs',len(d.get('result',[])),'ms',round(ms,1))
+              except urllib.error.HTTPError as e:
+                print('SPAN',span,'HTTP',e.code,e.read(300).decode('utf-8','replace'))
+              except Exception as e:
+                print('SPAN',span,'EXC',repr(e))
+          PY
