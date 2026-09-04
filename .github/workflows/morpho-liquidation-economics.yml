@@ -1,0 +1,121 @@
+name: Morpho Liquidation Economics
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - '.github/workflows/morpho-liquidation-economics.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  economics:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Compute historical tx economics using event values, historical oracle prices and receipts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' | tee morpho-liquidation-economics.jsonl
+          import json, urllib.request, subprocess, collections, decimal
+          decimal.getcontext().prec=60
+          D=decimal.Decimal
+          API='https://api.morpho.org/graphql'
+          RPC='https://base-mainnet.g.alchemy.com/public'
+          # Morpho USDC/WETH oracle used only to convert Base execution fees from ETH to USDC at the historical block.
+          ETH_USDC_ORACLE='0xFEa2D58cEfCb9fcb597723c6bAE66fFE4193aFE4'
+          q='''query {
+            marketTransactions(first: 100, orderBy: Timestamp, orderDirection: Desc,
+              where: { chainId_in: [8453], type_in: [Liquidation] }) {
+              items {
+                blockNumber txHash logIndex timestamp
+                market { marketId loanAsset { address symbol decimals } collateralAsset { address symbol decimals } oracle { address } }
+                data { ... on MarketTransactionLiquidationData { seizedAssets repaidAssets badDebtAssets liquidator } }
+              }
+            }
+          }'''
+          req=urllib.request.Request(API,data=json.dumps({'query':q}).encode(),headers={'content-type':'application/json','user-agent':'profit-engine-v07-economics'})
+          with urllib.request.urlopen(req,timeout=40) as r: out=json.loads(r.read())
+          if out.get('errors'): raise RuntimeError(out['errors'])
+          items=out['data']['marketTransactions']['items']
+          oracle_cache={}; receipt_cache={}; eth_price_cache={}
+          def call_price(oracle,block):
+              k=(oracle.lower(),int(block))
+              if k in oracle_cache:return oracle_cache[k]
+              txt=subprocess.check_output(['cast','call',oracle,'price()(uint256)','--block',str(block),'--rpc-url',RPC],text=True,stderr=subprocess.STDOUT).strip()
+              v=int(txt.split()[0],0);oracle_cache[k]=v;return v
+          def receipt(tx):
+              if tx in receipt_cache:return receipt_cache[tx]
+              data=json.loads(subprocess.check_output(['cast','rpc','eth_getTransactionReceipt',tx,'--rpc-url',RPC],text=True))
+              receipt_cache[tx]=data;return data
+          def eth_usdc_price(block):
+              # WETH collateral 18d, USDC loan 6d => Morpho oracle scale = 1e24.
+              if block not in eth_price_cache:
+                  eth_price_cache[block]=call_price(ETH_USDC_ORACLE,block)
+              return eth_price_cache[block]
+          txs=collections.defaultdict(lambda:{'events':[]})
+          failures=0
+          for x in items:
+              m=x['market'];d=x['data']; loan=m['loanAsset']; coll=m['collateralAsset']
+              try:
+                  block=int(x['blockNumber']); seized=int(d['seizedAssets']); repaid=int(d['repaidAssets']);
+                  price=call_price(m['oracle']['address'],block)
+                  scale=D(10) ** D(36 + int(loan['decimals']) - int(coll['decimals']))
+                  collateral_value_units=(D(seized)*D(price))/scale
+                  gross_units=collateral_value_units-D(repaid)
+                  event={
+                    'block':block,'tx':x['txHash'],'market':m['marketId'],'loan':loan['symbol'],'collateral':coll['symbol'],
+                    'repaid_raw':repaid,'seized_raw':seized,'collateral_value_loan_raw':str(collateral_value_units),
+                    'gross_bonus_loan_raw':str(gross_units),'badDebt_raw':int(d.get('badDebtAssets') or 0),'liquidator':d.get('liquidator')
+                  }
+                  txs[x['txHash']]['events'].append(event)
+              except Exception as e:
+                  failures+=1;print(json.dumps({'EVENT_ERROR':str(e)[:250],'tx':x.get('txHash')}))
+          ranked=[]
+          for tx,g in txs.items():
+              evs=g['events']; block=evs[0]['block']; loan=evs[0]['loan']
+              # Only combine economics when all liquidation events in the tx repay the same loan token.
+              if not evs or any(e['loan']!=loan for e in evs): continue
+              loan_dec=int(next(x['market']['loanAsset']['decimals'] for x in items if x['txHash']==tx))
+              gross_raw=sum(D(e['gross_bonus_loan_raw']) for e in evs)
+              repaid_raw=sum(D(e['repaid_raw']) for e in evs)
+              try:
+                  r=receipt(tx); gas_used=int(r['gasUsed'],16); egp=int(r['effectiveGasPrice'],16)
+                  execution_wei=gas_used*egp
+                  l1_wei=int(r.get('l1Fee','0x0'),16) if isinstance(r.get('l1Fee','0x0'),str) else int(r.get('l1Fee',0) or 0)
+                  total_fee_wei=execution_wei+l1_wei
+                  ethp=eth_usdc_price(block)
+                  # wei ETH * Morpho WETH/USDC oracle price / 1e24 = USDC base units.
+                  gas_usdc_raw=D(total_fee_wei)*D(ethp)/D(10**24)
+              except Exception as e:
+                  gas_used=egp=execution_wei=l1_wei=total_fee_wei=0;gas_usdc_raw=D(0); print(json.dumps({'RECEIPT_ERROR':str(e)[:200],'tx':tx}))
+              gross_human=gross_raw/(D(10)**loan_dec)
+              repaid_human=repaid_raw/(D(10)**loan_dec)
+              gas_usdc=gas_usdc_raw/D(10**6)
+              # These recent samples are predominantly USDC-loan liquidations. If another loan token appears,
+              # do not pretend the gas conversion is denominated in that loan token.
+              net_before_swap=(gross_human-gas_usdc) if loan=='USDC' else None
+              row={
+                'tx':tx,'block':block,'events':len(evs),'loan':loan,'collaterals':sorted(set(e['collateral'] for e in evs)),
+                'repaid':float(repaid_human),'oracle_gross_bonus':float(gross_human),'gas_usdc':float(gas_usdc),
+                'net_before_dex_slippage':float(net_before_swap) if net_before_swap is not None else None,
+                'gasUsed':gas_used,'effectiveGasPrice':egp,'l1FeeWei':l1_wei,'liquidators':sorted(set(e['liquidator'] for e in evs))
+              }
+              ranked.append(row)
+          ranked.sort(key=lambda r:(r['net_before_dex_slippage'] if r['net_before_dex_slippage'] is not None else -1e99),reverse=True)
+          print(json.dumps({'SUMMARY':{'events':len(items),'txs':len(txs),'event_errors':failures,'ranked_txs':len(ranked)}}))
+          for r in ranked[:30]:print(json.dumps(r,separators=(',',':')))
+          PY
+      - name: Upload economics evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: morpho-liquidation-economics
+          path: morpho-liquidation-economics.jsonl
+          retention-days: 30
