@@ -1,0 +1,52 @@
+name: SVR Aave Quick Shock
+
+on:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - '.github/workflows/svr-aave-quickshock.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quickshock:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Fast 300k-block Aave ETH shock projection
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 - <<'PY' | tee quickshock.log
+          import sys, json
+          sys.path.insert(0,'.')
+          from scripts.svr_aave_preliq_live import index_usdc_borrowers, snapshot
+          users=index_usdc_borrowers(max_users=800,lookback=300_000)
+          near, price=snapshot(users)
+          ratio=2511126115973709000000/1e18/(price/1e8)
+          crossed=[]; near_after=[]
+          for x in near:
+              cf=x['wethCollateralFraction']; df=x['wethDebtFraction']
+              if cf < .50 or df > .20 or x['usdcDebtFraction'] < .30: continue
+              newhf=x['hf']*((1+cf*(ratio-1))/(1+df*(ratio-1)))
+              row={**x,'projectedHF':newhf,'shockPct':(ratio-1)*100}
+              if x['hf']>=1 and newhf<1: crossed.append(row)
+              if newhf<1.005: near_after.append(row)
+          crossed.sort(key=lambda x:x['projectedHF'])
+          near_after.sort(key=lambda x:x['projectedHF'])
+          print('QUICK_SUMMARY',json.dumps({'currentAaveETHUSD':price/1e8,'futureETHUSD':2511.126115973709,'shockPct':(ratio-1)*100,'nearHFAccounts':len(near),'crossed':len(crossed),'nearAfter':len(near_after)},separators=(',',':')))
+          for x in crossed[:30]: print('CROSSED',json.dumps(x,separators=(',',':')))
+          for x in near_after[:30]: print('AFTER_NEAR',json.dumps(x,separators=(',',':')))
+          PY
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: svr-aave-quickshock-evidence
+          path: quickshock.log
+          retention-days: 30
