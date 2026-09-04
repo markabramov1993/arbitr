@@ -1,0 +1,113 @@
+name: Base Live Uniswap V3 Cycle Scan
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - '.github/workflows/base-v3-cycle-scan.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Quote V3 two-pool cycles on Base
+        shell: bash
+        run: |
+          set -euo pipefail
+          export RPC_PRIMARY=https://base-mainnet.g.alchemy.com/public
+          export RPC_FALLBACK=https://mainnet.base.org
+          export WETH=4200000000000000000000000000000000000006
+          export USDC=833589fcd6edb6e08f4c7c32d4f71b54bda02913
+          export QUOTER=0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a
+          export AAVE=0xA238Dd80C259a72e81d7e4664a9801593F98d1c5
+          export FLASH_SEL=$(cast sig 'FLASHLOAN_PREMIUM_TOTAL()')
+          export QUOTE_SEL=$(cast sig 'quoteExactInput(bytes,uint256)')
+
+          python3 - <<'PY'
+          import os,json,urllib.request,subprocess
+          urls=[os.environ['RPC_PRIMARY'],os.environ['RPC_FALLBACK']]
+          quoter=os.environ['QUOTER']; aave=os.environ['AAVE']; flash_sel=os.environ['FLASH_SEL']; quote_sel=os.environ['QUOTE_SEL'][2:]
+          usdc=os.environ['USDC']; weth=os.environ['WETH']
+          fees=[100,500,3000,10000]
+          amounts=[5,10,25,50,100,250,500,1000,2500,5000,10000,25000]
+
+          def path(f1,f2):
+              return '0x'+usdc+f1.to_bytes(3,'big').hex()+weth+f2.to_bytes(3,'big').hex()+usdc
+          def enc_uint(x): return x.to_bytes(32,'big').hex()
+          def enc_bytes(bhex):
+              raw=bytes.fromhex(bhex[2:]); pad=(32-len(raw)%32)%32
+              return enc_uint(len(raw)) + raw.hex() + '00'*pad
+          def quote_calldata(p,amount):
+              # ABI: selector | offset=64 | amount | bytes_length | bytes_data
+              return '0x'+quote_sel+enc_uint(64)+enc_uint(amount)+enc_bytes(p)
+          def post(url,payload):
+              data=json.dumps(payload).encode(); req=urllib.request.Request(url,data=data,headers={'content-type':'application/json','user-agent':'profit-engine-v07'})
+              with urllib.request.urlopen(req,timeout=30) as r: return json.loads(r.read())
+          def call_batches(reqs):
+              last=None
+              for url in urls:
+                  try:
+                      out=[]
+                      for i in range(0,len(reqs),40):
+                          body=post(url,reqs[i:i+40]);
+                          if not isinstance(body,list): raise RuntimeError(body)
+                          out.extend(body)
+                      print('RPC='+url); return out
+                  except Exception as e:
+                      last=e; print(f'RPC failed {url}: {e}')
+              raise RuntimeError(last)
+
+          base=[
+              {'jsonrpc':'2.0','id':'block','method':'eth_blockNumber','params':[]},
+              {'jsonrpc':'2.0','id':'gas','method':'eth_gasPrice','params':[]},
+              {'jsonrpc':'2.0','id':'flash','method':'eth_call','params':[{'to':aave,'data':flash_sel},'latest']},
+          ]
+          meta={}
+          for f1 in fees:
+              for f2 in fees:
+                  if f1==f2: continue
+                  for usd in amounts:
+                      rid=f'q:{f1}:{f2}:{usd}'
+                      meta[rid]=(f1,f2,usd)
+                      base.append({'jsonrpc':'2.0','id':rid,'method':'eth_call','params':[{'to':quoter,'data':quote_calldata(path(f1,f2),int(usd*1e6))},'latest']})
+          rows=call_batches(base); by={x['id']:x for x in rows}
+          block=int(by['block']['result'],16); gas_price=int(by['gas']['result'],16); flash_bps=int(by['flash']['result'],16)
+          print(f'BLOCK={block} GAS_PRICE_WEI={gas_price} AAVE_FLASH_PREMIUM_BPS={flash_bps}')
+          best=None; ok=0; missing=0
+          for rid,(f1,f2,usd) in meta.items():
+              x=by.get(rid)
+              if not x or 'error' in x:
+                  missing+=1; continue
+              h=x.get('result','0x')[2:]
+              if len(h)<128*2:
+                  missing+=1; continue
+              words=[int(h[i:i+64],16) for i in range(0,min(len(h),128*2),64)]
+              if len(words)<4: missing+=1; continue
+              out=words[0]/1e6; gas_est=words[3]
+              gross=out-usd
+              # Need ETH/USD for gas conversion. For screening, derive from the route itself only when output nonzero.
+              # Use a conservative $2600/ETH ceiling near the observed V2 market (~$2516), plus 120k gas for flash/settlement and $0.08 L1 data reserve.
+              eth_usd=2600.0
+              gas_usd=(gas_est+120_000)*gas_price/1e18*eth_usd+0.08
+              flash=usd*flash_bps/10000
+              net=gross-gas_usd-flash
+              row={'route':f'USDC-v3({f1})->WETH-v3({f2})->USDC','input_usdc':usd,'output_usdc':out,'gross_usd':gross,'quoter_gas_estimate':gas_est,'flash_fee_usd':flash,'gas_plus_l1_reserve_usd':gas_usd,'estimated_net_usd':net,'block':block}
+              ok+=1
+              if best is None or net>best['estimated_net_usd']: best=row
+          print(f'QUOTES_OK={ok} QUOTES_REVERTED_OR_MISSING={missing}')
+          print('\n=== BEST V3 TWO-POOL CYCLE ===')
+          if best:
+              best['note']='QuoterV2 same-block screening; not realized P&L; must pass stateful fork before any execution.'
+              print(json.dumps(best,indent=2)); print('CANDIDATE_NET_POSITIVE='+('yes' if best['estimated_net_usd']>0 else 'no'))
+          else:
+              print('No valid V3 two-pool cycle quotes returned.')
+          PY
