@@ -1,0 +1,123 @@
+name: Base Live V2 Market Discovery
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - '.github/workflows/base-market-discovery.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Discover pools and calculate round-trip edges
+        shell: bash
+        run: |
+          set -euo pipefail
+          for candidate in https://mainnet.base.org https://base-mainnet.g.alchemy.com/public; do
+            if cast chain-id --rpc-url "$candidate" >/dev/null 2>&1; then
+              RPC="$candidate"
+              break
+            fi
+          done
+          test -n "${RPC:-}"
+          export RPC
+          echo "RPC=$RPC"
+          echo "BLOCK=$(cast block-number --rpc-url "$RPC")"
+
+          export WETH=0x4200000000000000000000000000000000000006
+          export USDC=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+          export UNI_FACTORY=0x8909dc15e40173ff4699343b6eb8132c65e18ec6
+          export PANCAKE_ROUTER=0x8cFe327CEc66d1C090Dd72bd0FF11d690C33a2Eb
+          export SUSHI_KNOWN_PAIR=0x404e927b203375779a6abd52a2049ce0adf6609b
+          export AAVE_POOL=0xA238Dd80C259a72e81d7e4664a9801593F98d1c5
+
+          export PANCAKE_FACTORY=$(cast call "$PANCAKE_ROUTER" 'factory()(address)' --rpc-url "$RPC" | tr -d '[:space:]')
+          export SUSHI_FACTORY=$(cast call "$SUSHI_KNOWN_PAIR" 'factory()(address)' --rpc-url "$RPC" | tr -d '[:space:]')
+          export UNI_PAIR=$(cast call "$UNI_FACTORY" 'getPair(address,address)(address)' "$WETH" "$USDC" --rpc-url "$RPC" | tr -d '[:space:]')
+          export PANCAKE_PAIR=$(cast call "$PANCAKE_FACTORY" 'getPair(address,address)(address)' "$WETH" "$USDC" --rpc-url "$RPC" | tr -d '[:space:]')
+          export SUSHI_PAIR=$(cast call "$SUSHI_FACTORY" 'getPair(address,address)(address)' "$WETH" "$USDC" --rpc-url "$RPC" | tr -d '[:space:]')
+          export GAS_PRICE_WEI=$(cast gas-price --rpc-url "$RPC" | tr -d '[:space:]')
+          export FLASH_BPS=$(cast call "$AAVE_POOL" 'FLASHLOAN_PREMIUM_TOTAL()(uint128)' --rpc-url "$RPC" | grep -oE '^[0-9]+' || echo 0)
+
+          echo "UNI_FACTORY=$UNI_FACTORY UNI_PAIR=$UNI_PAIR"
+          echo "PANCAKE_FACTORY=$PANCAKE_FACTORY PANCAKE_PAIR=$PANCAKE_PAIR"
+          echo "SUSHI_FACTORY=$SUSHI_FACTORY SUSHI_PAIR=$SUSHI_PAIR"
+          echo "AAVE_FLASH_PREMIUM_BPS=$FLASH_BPS GAS_PRICE_WEI=$GAS_PRICE_WEI"
+
+          python3 - <<'PY'
+          import os, re, subprocess, json
+          RPC=os.environ['RPC']; WETH=os.environ['WETH'].lower(); USDC=os.environ['USDC'].lower()
+          gas_price=int(os.environ['GAS_PRICE_WEI']); flash_bps=int(os.environ.get('FLASH_BPS','0'))
+          zero='0x0000000000000000000000000000000000000000'
+          pairs=[
+              ('uniswap_v2', os.environ['UNI_PAIR'], 30),
+              ('pancake_v2', os.environ['PANCAKE_PAIR'], 25),
+              ('sushi_v2', os.environ['SUSHI_PAIR'], 30),
+          ]
+          def c(addr,sig,*args):
+              cmd=['cast','call',addr,sig,*args,'--rpc-url',RPC]
+              return subprocess.check_output(cmd,text=True).strip()
+          def first_ints(s,n):
+              vals=[]
+              for line in s.splitlines():
+                  m=re.match(r'\s*(\d+)',line)
+                  if m: vals.append(int(m.group(1)))
+              if len(vals)<n:
+                  vals=[int(x) for x in re.findall(r'(?<![A-Za-z0-9])\d+',s)[:n]]
+              return vals[:n]
+          states={}
+          for name,pair,fee in pairs:
+              if not pair or pair.lower()==zero:
+                  print(f'{name}: no WETH/USDC pair')
+                  continue
+              t0=c(pair,'token0()(address)').lower()
+              t1=c(pair,'token1()(address)').lower()
+              r0,r1,_=first_ints(c(pair,'getReserves()(uint112,uint112,uint32)'),3)
+              if {t0,t1}!={WETH,USDC}:
+                  print(f'{name}: unexpected tokens {t0} {t1}')
+                  continue
+              rw = r0 if t0==WETH else r1
+              ru = r0 if t0==USDC else r1
+              price=(ru/1e6)/(rw/1e18)
+              states[name]={'pair':pair,'rw':rw,'ru':ru,'fee':fee,'price':price}
+              print(f'{name}: pair={pair} WETH={rw/1e18:.6f} USDC={ru/1e6:.2f} mid=${price:.6f}/WETH fee={fee/100:.2f}%')
+          def swap(amount,res_in,res_out,fee_bps):
+              a=amount*(10000-fee_bps)
+              return (a*res_out)//(res_in*10000+a)
+          best=None
+          amounts=[10,25,50,100,250,500,1000,2500,5000,10000]
+          names=list(states)
+          for a in names:
+              for b in names:
+                  if a==b: continue
+                  A=states[a]; B=states[b]
+                  for usd in amounts:
+                      inp=int(usd*1e6)
+                      weth=swap(inp,A['ru'],A['rw'],A['fee'])
+                      out=swap(weth,B['rw'],B['ru'],B['fee'])
+                      gross=(out-inp)/1e6
+                      eth_price=(A['price']+B['price'])/2
+                      # conservative research estimate: 350k L2 gas + $0.05 L1/data reserve.
+                      gas_usd=350_000*gas_price/1e18*eth_price + 0.05
+                      flash=usd*flash_bps/10000
+                      net=gross-gas_usd-flash
+                      row=(net,gross,usd,a,b,weth/1e18,out/1e6,gas_usd,flash)
+                      if best is None or row>best: best=row
+          print('\n=== BEST STATIC V2 ROUNDTRIP ===')
+          if not best:
+              print('No two distinct V2 venues with WETH/USDC liquidity discovered.')
+          else:
+              net,gross,usd,a,b,weth,out,gas,flash=best
+              print(json.dumps({'route':f'USDC->{a}:WETH->{b}:USDC','input_usdc':usd,'intermediate_weth':weth,'output_usdc':out,'gross_usd':gross,'aave_flash_fee_usd':flash,'gas_plus_l1_reserve_usd':gas,'estimated_net_usd':net,'note':'static same-block reserve research; not realized P&L'},indent=2))
+              print('CANDIDATE_NET_POSITIVE=' + ('yes' if net>0 else 'no'))
+          PY
