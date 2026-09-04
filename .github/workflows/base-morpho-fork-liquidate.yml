@@ -1,0 +1,103 @@
+name: Base Morpho Fork Liquidation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - '.github/workflows/base-morpho-fork-liquidate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Execute listed wstETH/WETH liquidation on Base fork and quote exit
+        shell: bash
+        run: |
+          set -euo pipefail
+          REMOTE='https://base-mainnet.g.alchemy.com/public'
+          LOCAL='http://127.0.0.1:8545'
+          MORPHO='0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb'
+          WETH='0x4200000000000000000000000000000000000006'
+          WSTETH='0xc1CBa3fCea344f92D9239c08C0568f6F2F0ee452'
+          ORACLE='0xaE10cbdAa587646246c8253E4532A002EE4fa7A4'
+          IRM='0x46415998764C29aB2a25CbeA6254146D50D22687'
+          LLTV='965000000000000000'
+          MARKET='0x6aa81f51dfc955df598e18006deae56ce907ac02b0b5358705f1a28fcea23cc0'
+          BORROWER='0x10c53e75fE7A7E6bF58a9e68B6a30Fcc7D4e6e2c'
+          QUOTER='0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a'
+          FACTORY='0x33128a8fC17869897dcE68Ed026d694621f6FDfD'
+          EOA='0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
+          MAX='0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+          anvil --fork-url "$REMOTE" --chain-id 8453 --port 8545 --silent >/tmp/anvil.log 2>&1 &
+          ANVIL_PID=$!
+          trap 'kill $ANVIL_PID 2>/dev/null || true' EXIT
+          for i in {1..30}; do cast block-number --rpc-url "$LOCAL" >/dev/null 2>&1 && break; sleep 1; done
+          echo "FORK_BLOCK=$(cast block-number --rpc-url "$LOCAL")"
+
+          POS=$(cast call "$MORPHO" 'position(bytes32,address)(uint256,uint128,uint128)' "$MARKET" "$BORROWER" --rpc-url "$LOCAL")
+          echo "$POS"
+          REPAID_SHARES=$(printf '%s\n' "$POS" | sed -n '2p' | awk '{print $1}')
+          echo "REPAID_SHARES=$REPAID_SHARES"
+          if [ -z "$REPAID_SHARES" ] || [ "$REPAID_SHARES" = '0' ]; then echo 'NO_DEBT_LEFT'; exit 0; fi
+
+          cast send "$WETH" 'deposit()' --value 100ether --from "$EOA" --unlocked --rpc-url "$LOCAL" >/dev/null
+          cast send "$WETH" 'approve(address,uint256)' "$MORPHO" "$MAX" --from "$EOA" --unlocked --rpc-url "$LOCAL" >/dev/null
+          WETH_BEFORE=$(cast call "$WETH" 'balanceOf(address)(uint256)' "$EOA" --rpc-url "$LOCAL" | awk '{print $1}')
+          WSTETH_BEFORE=$(cast call "$WSTETH" 'balanceOf(address)(uint256)' "$EOA" --rpc-url "$LOCAL" | awk '{print $1}')
+
+          set +e
+          LIQ=$(cast send "$MORPHO" 'liquidate((address,address,address,address,uint256),address,uint256,uint256,bytes)' "($WETH,$WSTETH,$ORACLE,$IRM,$LLTV)" "$BORROWER" 0 "$REPAID_SHARES" 0x --from "$EOA" --unlocked --rpc-url "$LOCAL" --json 2>&1)
+          RC=$?
+          set -e
+          echo "$LIQ"
+          if [ "$RC" -ne 0 ]; then echo 'LIQUIDATE_EXECUTABLE=false'; exit 0; fi
+          echo 'LIQUIDATE_EXECUTABLE=true'
+
+          WETH_AFTER=$(cast call "$WETH" 'balanceOf(address)(uint256)' "$EOA" --rpc-url "$LOCAL" | awk '{print $1}')
+          WSTETH_AFTER=$(cast call "$WSTETH" 'balanceOf(address)(uint256)' "$EOA" --rpc-url "$LOCAL" | awk '{print $1}')
+          SPENT=$((WETH_BEFORE-WETH_AFTER))
+          SEIZED=$((WSTETH_AFTER-WSTETH_BEFORE))
+          echo "WETH_REPAID_WEI=$SPENT"
+          echo "WSTETH_SEIZED_WEI=$SEIZED"
+
+          BEST_OUT=0
+          BEST_FEE=0
+          for FEE in 100 500 3000 10000; do
+            POOL=$(cast call "$FACTORY" 'getPool(address,address,uint24)(address)' "$WSTETH" "$WETH" "$FEE" --rpc-url "$LOCAL" 2>/dev/null || true)
+            echo "POOL fee=$FEE address=$POOL"
+            set +e
+            Q=$(cast call "$QUOTER" 'quoteExactInputSingle((address,address,uint256,uint24,uint160))(uint256,uint160,uint32,uint256)' "($WSTETH,$WETH,$SEIZED,$FEE,0)" --rpc-url "$LOCAL" 2>/dev/null)
+            QRC=$?
+            set -e
+            if [ "$QRC" -eq 0 ]; then
+              OUT=$(printf '%s\n' "$Q" | sed -n '1p' | awk '{print $1}')
+              echo "QUOTE fee=$FEE amountOutWei=$OUT"
+              if [ "$OUT" -gt "$BEST_OUT" ]; then BEST_OUT=$OUT; BEST_FEE=$FEE; fi
+            fi
+          done
+          GAS_PRICE=$(cast gas-price --rpc-url "$REMOTE" | awk '{print $1}')
+          python3 - "$SPENT" "$SEIZED" "$BEST_OUT" "$BEST_FEE" "$GAS_PRICE" <<'PY'
+          import sys
+          spent,seized,out,fee,gas=map(int,sys.argv[1:])
+          gross=out-spent
+          reserve=900_000*gas + 5_000_000_000_000_000
+          net=gross-reserve
+          print(f'SPENT_WETH={spent/1e18:.9f}')
+          print(f'SEIZED_WSTETH={seized/1e18:.9f}')
+          print(f'EXIT_WETH={out/1e18:.9f}')
+          print(f'GROSS_WETH={gross/1e18:.9f}')
+          print(f'CONSERVATIVE_RESERVE_WETH={reserve/1e18:.9f}')
+          print(f'NET_AFTER_RESERVE_WETH={net/1e18:.9f}')
+          print(f'EXIT_FEE_TIER={fee}')
+          print('EXECUTABLE_SCREEN=' + ('true' if net>0 else 'false'))
+          PY
