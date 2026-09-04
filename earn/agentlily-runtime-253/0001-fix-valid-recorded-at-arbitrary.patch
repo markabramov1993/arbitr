@@ -1,0 +1,14 @@
+diff --git a/tests/memory/in-memory-memory-store.property.test.ts b/tests/memory/in-memory-memory-store.property.test.ts
+--- a/tests/memory/in-memory-memory-store.property.test.ts
++++ b/tests/memory/in-memory-memory-store.property.test.ts
+@@ -10,7 +10,9 @@ describe("InMemoryMemoryStore property-based tests", () => {
+   const taskIdArb = fc.string({ minLength: 1, maxLength: 20 });
+   const inputArb = fc.string();
+   const outputArb = fc.anything();
+-  const recordedAtArb = fc.date().map((d) => d.toISOString());
++  const recordedAtArb = fc
++    .date({ noInvalidDate: true })
++    .map((d) => d.toISOString());
+ 
+   const entryArb: fc.Arbitrary<MemoryEntry> = fc.record({
+     agentId: agentIdArb,
