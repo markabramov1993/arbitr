@@ -1,0 +1,63 @@
+name: RustChain Miner Dry Run Bounty
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - '.github/workflows/rustchain-miner-dryrun.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Host facts
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p bounty-output
+          {
+            echo '=== DATE UTC ==='
+            date -u
+            echo '=== UNAME ==='
+            uname -a
+            echo '=== OS RELEASE ==='
+            cat /etc/os-release
+            echo '=== PYTHON ==='
+            python3 --version
+            echo '=== CPU ==='
+            lscpu
+          } | tee bounty-output/environment.txt
+
+      - name: Clone current RustChain
+        run: git clone --depth 1 https://github.com/Scottcjn/Rustchain.git
+
+      - name: Install minimal miner dependencies
+        shell: bash
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install requests pynacl cryptography
+
+      - name: Run exact bounty dry-run
+        shell: bash
+        run: |
+          set -o pipefail
+          cd Rustchain/miners/linux
+          python3 rustchain_linux_miner.py --dry-run --show-payload --verbose 2>&1 | tee ../../../bounty-output/miner-dry-run.txt
+
+      - name: Capture source revision
+        shell: bash
+        run: |
+          cd Rustchain
+          git rev-parse HEAD | tee ../bounty-output/rustchain-commit.txt
+
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustchain-miner-dryrun-evidence
+          path: bounty-output/
+          retention-days: 30
