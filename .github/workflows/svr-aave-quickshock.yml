@@ -19,6 +19,8 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           version: stable
+      - name: Install websocket dependency used by shared scanner module
+        run: python3 -m pip install --user 'websockets>=14,<16'
       - name: Fast 300k-block Aave ETH shock projection
         shell: bash
         run: |
