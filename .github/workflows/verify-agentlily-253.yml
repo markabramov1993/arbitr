@@ -1,0 +1,41 @@
+name: Verify AgentLily 253
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'earn/agentlily-runtime-253/**'
+      - '.github/workflows/verify-agentlily-253.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Clone current upstream
+        run: git clone --depth 1 https://github.com/Lilly-Protocol/agentlily-runtime.git target
+      - name: Apply fix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('target/tests/memory/in-memory-memory-store.property.test.ts')
+          s=p.read_text()
+          old='const recordedAtArb = fc.date().map((d) => d.toISOString());'
+          new='''const recordedAtArb = fc\n  .date({ noInvalidDate: true })\n  .map((d) => d.toISOString());'''
+          if old not in s: raise SystemExit('target line not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+      - name: Install dependencies
+        working-directory: target
+        run: npm ci
+      - name: Run property test
+        working-directory: target
+        run: npx vitest run tests/memory/in-memory-memory-store.property.test.ts
+      - name: Typecheck
+        working-directory: target
+        run: npm run typecheck
