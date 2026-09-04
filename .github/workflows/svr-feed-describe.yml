@@ -1,0 +1,33 @@
+name: SVR Feed Describe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/svr-feed-describe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  describe:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Describe observed Base SVR aggregators
+        shell: bash
+        run: |
+          RPC='https://base-mainnet.g.alchemy.com/public'
+          for A in \
+            0xb00e68fb3754EE8CC7B5F61348a2f09d53fB2e0e \
+            0xeb3Ad4395924b76eB64b3d6aBabA0B62875b1A1f \
+            0x43151D66D653aD888Bf909F006A01792d5f33243
+          do
+            echo "=== $A ==="
+            echo -n 'description: '; cast call "$A" 'description()(string)' --rpc-url "$RPC" || true
+            echo -n 'decimals: '; cast call "$A" 'decimals()(uint8)' --rpc-url "$RPC" || true
+            echo -n 'latestAnswer: '; cast call "$A" 'latestAnswer()(int256)' --rpc-url "$RPC" || true
+          done
