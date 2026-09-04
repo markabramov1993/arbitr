@@ -6,6 +6,8 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/superteam-public-detail.yml'
+  schedule:
+    - cron: '29 * * * *'
 
 permissions:
   contents: read
@@ -15,45 +17,128 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Fetch full public listing records with endpoint fallbacks
+      - name: Fetch agent-eligible public listings with fallbacks
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json, urllib.request, urllib.error
-          slugs=['steve-agent-arena-launch-your-agent-and-win-500-usdc','zns-sol']
-          bases=['https://earn.superteam.fun','https://superteam.fun']
-          paths=['/api/listings/details/{slug}','/api/listings/{slug}']
-          for slug in slugs:
-              print('===',slug,'===')
-              found=None
-              for base in bases:
-                  for pattern in paths:
-                      url=base+pattern.format(slug=slug)
-                      try:
-                          req=urllib.request.Request(url,headers={'User-Agent':'profit-engine-public-detail/1.0'})
-                          with urllib.request.urlopen(req,timeout=20) as r:
-                              body=r.read(); status=r.status
-                      except urllib.error.HTTPError as e:
-                          status=e.code; body=e.read()
-                      except Exception as e:
-                          print('TRY',url,'-> ERROR',repr(e)); continue
-                      print('TRY',url,'->',status)
-                      if status==200:
-                          found=json.loads(body)
+          import json
+          import urllib.error
+          import urllib.request
+          from pathlib import Path
+
+          TARGET_SLUGS = {
+              'steve-agent-arena-launch-your-agent-and-win-500-usdc',
+              'zns-sol',
+          }
+          HOSTS = ['https://earn.superteam.fun', 'https://superteam.fun']
+
+          def fetch_json(url):
+              req = urllib.request.Request(
+                  url,
+                  headers={
+                      'User-Agent': 'profit-engine-superteam-radar/2.0',
+                      'Accept': 'application/json',
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=20) as r:
+                      body = r.read()
+                      status = r.status
+              except urllib.error.HTTPError as e:
+                  status = e.code
+                  body = e.read()
+              except Exception as e:
+                  print('TRY', url, '-> ERROR', repr(e))
+                  return None, None
+              print('TRY', url, '->', status)
+              if status != 200:
+                  return status, None
+              try:
+                  return status, json.loads(body)
+              except Exception as e:
+                  print('JSON_ERROR', url, repr(e))
+                  return status, None
+
+          feed = None
+          feed_host = None
+          for host in HOSTS:
+              status, data = fetch_json(host + '/api/listings?take=100')
+              if status == 200 and data is not None:
+                  feed = data
+                  feed_host = host
+                  break
+
+          def as_list(data):
+              if isinstance(data, list):
+                  return data
+              if isinstance(data, dict):
+                  for key in ('listings', 'data', 'result'):
+                      value = data.get(key)
+                      if isinstance(value, list):
+                          return value
+              return []
+
+          rows = as_list(feed)
+          eligible = []
+          for row in rows:
+              status = str(row.get('status', '')).upper()
+              access = str(row.get('agentAccess', '')).upper()
+              if status == 'OPEN' and access in {'AGENT_ALLOWED', 'AGENT_ONLY'}:
+                  eligible.append(row)
+
+          eligible.sort(key=lambda r: str(r.get('deadline') or '9999'))
+          print('PUBLIC_FEED_HOST=', feed_host)
+          print('PUBLIC_FEED_COUNT=', len(rows))
+          print('AGENT_ELIGIBLE_OPEN_COUNT=', len(eligible))
+
+          Path('superteam-agent-eligible-open.json').write_text(
+              json.dumps(eligible, ensure_ascii=False, indent=2), encoding='utf-8'
+          )
+
+          # Preserve target detail snapshots, but never fail the radar if a detail endpoint changes.
+          for slug in sorted(TARGET_SLUGS):
+              detail = None
+              for host in HOSTS:
+                  for path in (
+                      f'/api/listings/details/{slug}',
+                      f'/api/listings/{slug}',
+                  ):
+                      status, data = fetch_json(host + path)
+                      if status == 200 and data is not None:
+                          detail = data
                           break
-                  if found is not None: break
-              if found is None:
-                  found={'error':'detail endpoints unavailable'}
-              with open(slug+'.json','w') as f: json.dump(found,f,ensure_ascii=False,indent=2)
-              print(json.dumps(found,ensure_ascii=False,indent=2)[:60000])
+                  if detail is not None:
+                      break
+
+              if detail is None:
+                  detail = next((r for r in rows if r.get('slug') == slug), None)
+              if detail is None:
+                  detail = {'slug': slug, 'error': 'not present in public feed/detail endpoints'}
+
+              Path(slug + '.json').write_text(
+                  json.dumps(detail, ensure_ascii=False, indent=2), encoding='utf-8'
+              )
+
+          for row in eligible[:50]:
+              keep = {
+                  k: row.get(k)
+                  for k in (
+                      'id', 'slug', 'title', 'status', 'agentAccess', 'deadline',
+                      'type', 'token', 'reward', 'rewards', 'compensation', 'sponsor'
+                  )
+                  if k in row
+              }
+              print('ELIGIBLE=' + json.dumps(keep, ensure_ascii=False, sort_keys=True))
           PY
+
       - name: Upload details
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: superteam-public-details
           path: |
+            superteam-agent-eligible-open.json
             steve-agent-arena-launch-your-agent-and-win-500-usdc.json
             zns-sol.json
           retention-days: 7
