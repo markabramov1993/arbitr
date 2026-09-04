@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: profit-engine-live-watch
@@ -113,11 +114,36 @@ jobs:
           forge test --match-contract ProfitEngineLiveWatchTest -vv 2>&1 | tee ../profit-engine-live-watch.log
 
       - name: Summarize signal
+        id: signal
         shell: bash
         run: |
           echo '=== SIGNAL SUMMARY ==='
-          grep -E 'EXECUTABLE_CANDIDATE|BORROWER|MARKET|LOAN_TOKEN|COLLATERAL_TOKEN|GROSS_INCENTIVE_LOAN_RAW|API_HF_E18|API_DEBT_USD_E6' profit-engine-live-watch.log || true
-          if grep -q 'EXECUTABLE_CANDIDATE: 1' profit-engine-live-watch.log; then echo 'PROFIT_ENGINE_SIGNAL=true'; else echo 'PROFIT_ENGINE_SIGNAL=false'; fi
+          grep -E 'EXECUTABLE_CANDIDATE|BORROWER|MARKET|LOAN_TOKEN|COLLATERAL_TOKEN|GROSS_INCENTIVE_LOAN_RAW|REPAID_RAW|SEIZED_RAW|API_HF_E18|API_DEBT_USD_E6' profit-engine-live-watch.log || true
+          if grep -q 'EXECUTABLE_CANDIDATE: 1' profit-engine-live-watch.log; then
+            echo 'PROFIT_ENGINE_SIGNAL=true'
+            echo 'positive=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'PROFIT_ENGINE_SIGNAL=false'
+            echo 'positive=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create or update executable-candidate alert
+        if: steps.signal.outputs.positive == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          DETAILS="$(grep -E 'EXECUTABLE_CANDIDATE|BORROWER|MARKET|LOAN_TOKEN|COLLATERAL_TOKEN|GROSS_INCENTIVE_LOAN_RAW|REPAID_RAW|SEIZED_RAW|API_HF_E18|API_DEBT_USD_E6' profit-engine-live-watch.log | tail -n 40)"
+          TITLE='[PROFIT ENGINE] Executable Morpho candidate'
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          BODY="$(printf 'Fresh Base fork validation produced at least one executable Morpho liquidation candidate.\n\nThis is a **read-only/fork signal only**. No transaction was signed or broadcast.\n\n```text\n%s\n```\n\nEvidence: %s' "$DETAILS" "$RUN_URL")"
+          EXISTING="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "${TITLE} in:title" --json number --jq '.[0].number // empty')"
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
+          fi
 
       - name: Upload evidence
         if: always()
