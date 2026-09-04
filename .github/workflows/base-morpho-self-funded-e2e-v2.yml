@@ -1,0 +1,111 @@
+name: Base Morpho Self-Funded E2E v2
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - '.github/workflows/base-morpho-self-funded-e2e-v2.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: profit-engine-v07
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Self-funded Morpho liquidation callback test
+        shell: bash
+        run: |
+          set -euo pipefail
+          forge build
+          REMOTE='https://base-mainnet.g.alchemy.com/public'; LOCAL='http://127.0.0.1:8545'
+          MORPHO='0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb'; ROUTER='0x2626664c2603336E57B271c5C0b26F421741e481'
+          QUOTER='0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a'; FACTORY='0x33128a8fC17869897dcE68Ed026d694621f6FDfD'
+          WETH='0x4200000000000000000000000000000000000006'; WSTETH='0xc1CBa3fCea344f92D9239c08C0568f6F2F0ee452'
+          ORACLE='0xaE10cbdAa587646246c8253E4532A002EE4fa7A4'; IRM='0x46415998764C29aB2a25CbeA6254146D50D22687'; LLTV='965000000000000000'
+          MARKET='0x6aa81f51dfc955df598e18006deae56ce907ac02b0b5358705f1a28fcea23cc0'; BORROWER='0x10c53e75fE7A7E6bF58a9e68B6a30Fcc7D4e6e2c'
+          EOA='0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'; MAX='0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+          anvil --fork-url "$REMOTE" --chain-id 8453 --port 8545 --silent >/tmp/anvil.log 2>&1 & PID=$!; trap 'kill $PID 2>/dev/null || true' EXIT
+          for i in {1..30}; do cast block-number --rpc-url "$LOCAL" >/dev/null 2>&1 && break; sleep 1; done
+          echo "FORK_BLOCK=$(cast block-number --rpc-url "$LOCAL")"
+
+          DEPLOY=$(forge create --rpc-url "$LOCAL" --from "$EOA" --unlocked --broadcast --json \
+            contracts/MorphoSelfFundedLiquidator.sol:MorphoSelfFundedLiquidator \
+            --constructor-args "$MORPHO" "$ROUTER")
+          echo "$DEPLOY"
+          LIQUIDATOR=$(python3 -c 'import json,sys; o=json.load(sys.stdin); print(o.get("deployedTo") or o.get("deployed_to") or o.get("contractAddress"))' <<<"$DEPLOY")
+          test -n "$LIQUIDATOR" && test "$LIQUIDATOR" != 'None'
+          echo "LIQUIDATOR=$LIQUIDATOR"
+
+          CW0=$(cast call "$WETH" 'balanceOf(address)(uint256)' "$LIQUIDATOR" --rpc-url "$LOCAL" | awk '{print $1}')
+          CC0=$(cast call "$WSTETH" 'balanceOf(address)(uint256)' "$LIQUIDATOR" --rpc-url "$LOCAL" | awk '{print $1}')
+          echo "CONTRACT_WETH_BEFORE=$CW0 CONTRACT_WSTETH_BEFORE=$CC0"
+          [ "$CW0" = 0 ] && [ "$CC0" = 0 ] || { echo 'ZERO_PREFUND_PRECONDITION=false'; exit 1; }
+          echo 'ZERO_PREFUND_PRECONDITION=true'
+
+          # This WETH belongs only to the test probe account used to find a future unhealthy timestamp.
+          # None is ever sent to the liquidator contract.
+          cast send "$WETH" 'deposit()' --value 100ether --from "$EOA" --unlocked --rpc-url "$LOCAL" >/dev/null
+          cast send "$WETH" 'approve(address,uint256)' "$MORPHO" "$MAX" --from "$EOA" --unlocked --rpc-url "$LOCAL" >/dev/null
+
+          SPENT=0; SEIZED=0; DAY_FOUND=-1; SHARES=0
+          for DAY in $(seq 0 60); do
+            if [ "$DAY" -gt 0 ]; then cast rpc evm_increaseTime 86400 --rpc-url "$LOCAL" >/dev/null; cast rpc evm_mine --rpc-url "$LOCAL" >/dev/null; fi
+            POS=$(cast call "$MORPHO" 'position(bytes32,address)(uint256,uint128,uint128)' "$MARKET" "$BORROWER" --rpc-url "$LOCAL")
+            SHARES=$(printf '%s\n' "$POS" | sed -n '2p' | awk '{print $1}')
+            [ -n "$SHARES" ] && [ "$SHARES" != 0 ] || break
+            SNAP=$(cast rpc evm_snapshot --rpc-url "$LOCAL" | tr -d '"')
+            WB=$(cast call "$WETH" 'balanceOf(address)(uint256)' "$EOA" --rpc-url "$LOCAL" | awk '{print $1}'); CB=$(cast call "$WSTETH" 'balanceOf(address)(uint256)' "$EOA" --rpc-url "$LOCAL" | awk '{print $1}')
+            set +e
+            cast send "$MORPHO" 'liquidate((address,address,address,address,uint256),address,uint256,uint256,bytes)' "($WETH,$WSTETH,$ORACLE,$IRM,$LLTV)" "$BORROWER" 0 "$SHARES" 0x --from "$EOA" --unlocked --rpc-url "$LOCAL" --json >/tmp/raw.json 2>/tmp/raw.err
+            RC=$?
+            set -e
+            if [ "$RC" -eq 0 ]; then
+              WA=$(cast call "$WETH" 'balanceOf(address)(uint256)' "$EOA" --rpc-url "$LOCAL" | awk '{print $1}'); CA=$(cast call "$WSTETH" 'balanceOf(address)(uint256)' "$EOA" --rpc-url "$LOCAL" | awk '{print $1}')
+              SPENT=$((WB-WA)); SEIZED=$((CA-CB)); DAY_FOUND=$DAY
+              cast rpc evm_revert "$SNAP" --rpc-url "$LOCAL" >/dev/null
+              break
+            fi
+            cast rpc evm_revert "$SNAP" --rpc-url "$LOCAL" >/dev/null
+          done
+          echo "SIMULATED_DAYS_TO_ELIGIBILITY=$DAY_FOUND REPAY_WEI=$SPENT SEIZED_WEI=$SEIZED"
+          if [ "$SPENT" = 0 ] || [ "$SEIZED" = 0 ]; then echo 'FUTURE_FORK_LIQUIDATION_FOUND=false'; exit 0; fi
+          echo 'FUTURE_FORK_LIQUIDATION_FOUND=true'
+
+          BEST_OUT=0; BEST_FEE=0
+          for FEE in 100 500 3000 10000; do
+            POOL=$(cast call "$FACTORY" 'getPool(address,address,uint24)(address)' "$WSTETH" "$WETH" "$FEE" --rpc-url "$LOCAL" 2>/dev/null || true)
+            [ "$POOL" = '0x0000000000000000000000000000000000000000' ] && continue
+            set +e
+            Q=$(cast call "$QUOTER" 'quoteExactInputSingle((address,address,uint256,uint24,uint160))(uint256,uint160,uint32,uint256)' "($WSTETH,$WETH,$SEIZED,$FEE,0)" --rpc-url "$LOCAL" 2>/dev/null); QRC=$?
+            set -e
+            if [ "$QRC" -eq 0 ]; then OUT=$(printf '%s\n' "$Q" | sed -n '1p' | awk '{print $1}'); echo "QUOTE_FEE=$FEE OUT_WEI=$OUT"; if [ "$OUT" -gt "$BEST_OUT" ]; then BEST_OUT=$OUT; BEST_FEE=$FEE; fi; fi
+          done
+          echo "BEST_FEE=$BEST_FEE BEST_OUT=$BEST_OUT REPAY=$SPENT"
+          if [ "$BEST_OUT" -le "$SPENT" ]; then echo 'DIRECT_ROUTE_CAN_SELF_FUND=false'; exit 0; fi
+          echo 'DIRECT_ROUTE_CAN_SELF_FUND=true'
+
+          GROSS=$((BEST_OUT-SPENT)); MIN_PROFIT=$((GROSS/5)); [ "$MIN_PROFIT" -gt 0 ] || MIN_PROFIT=1; REQUIRED=$((SPENT+MIN_PROFIT))
+          OWNER_BEFORE=$(cast call "$WETH" 'balanceOf(address)(uint256)' "$EOA" --rpc-url "$LOCAL" | awk '{print $1}')
+          echo "CALL_MIN_PROFIT=$MIN_PROFIT CALL_MIN_SWAP_OUT=$REQUIRED CONTRACT_WETH_PREFUND=$(cast call "$WETH" 'balanceOf(address)(uint256)' "$LIQUIDATOR" --rpc-url "$LOCAL" | awk '{print $1}')"
+
+          TX=$(cast send "$LIQUIDATOR" 'execute((address,address,address,address,uint256),address,uint256,uint24,uint256,uint256,bytes32)(uint256)' \
+            "($WETH,$WSTETH,$ORACLE,$IRM,$LLTV)" "$BORROWER" "$SHARES" "$BEST_FEE" "$REQUIRED" "$MIN_PROFIT" "$MARKET" \
+            --from "$EOA" --unlocked --rpc-url "$LOCAL" --json)
+          echo "$TX"
+          OWNER_AFTER=$(cast call "$WETH" 'balanceOf(address)(uint256)' "$EOA" --rpc-url "$LOCAL" | awk '{print $1}')
+          PROFIT=$((OWNER_AFTER-OWNER_BEFORE)); CW1=$(cast call "$WETH" 'balanceOf(address)(uint256)' "$LIQUIDATOR" --rpc-url "$LOCAL" | awk '{print $1}'); CC1=$(cast call "$WSTETH" 'balanceOf(address)(uint256)' "$LIQUIDATOR" --rpc-url "$LOCAL" | awk '{print $1}')
+          echo "OWNER_PROFIT_WEI=$PROFIT CONTRACT_WETH_AFTER=$CW1 CONTRACT_WSTETH_AFTER=$CC1"
+          python3 - "$PROFIT" "$GROSS" "$DAY_FOUND" <<'PY'
+          import sys
+          p,g,d=map(int,sys.argv[1:]); print(f'OWNER_PROFIT_WETH={p/1e18:.9f}'); print(f'QUOTED_GROSS_WETH={g/1e18:.9f}'); print(f'SIMULATED_DAYS_TO_ELIGIBILITY={d}'); print('END_TO_END_SELF_FUNDED=' + ('true' if p>0 else 'false'))
+          PY
