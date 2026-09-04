@@ -1,0 +1,97 @@
+name: Base Morpho Aerodrome Self-Funded E2E
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - 'contracts/MorphoSelfFundedLiquidatorV2.sol'
+      - '.github/workflows/base-morpho-aerodrome-e2e.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: profit-engine-v07}
+      - uses: foundry-rs/foundry-toolchain@v1
+        with: {version: stable}
+      - name: Execute zero-prefund Morpho liquidation via Aerodrome Slipstream on Base fork
+        shell: bash
+        run: |
+          set -euo pipefail
+          forge build >/dev/null
+          REMOTE='https://base-mainnet.g.alchemy.com/public'; LOCAL='http://127.0.0.1:8545'
+          MORPHO='0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb'
+          UNI_ROUTER='0x2626664c2603336E57B271c5C0b26F421741e481'
+          AERO_ROUTER='0xBE6D8f0d05cC4be24d5167a3eF062215bE6D18a5'
+          WETH='0x4200000000000000000000000000000000000006'; WSTETH='0xc1CBa3fCea344f92D9239c08C0568f6F2F0ee452'
+          ORACLE='0xaE10cbdAa587646246c8253E4532A002EE4fa7A4'; IRM='0x46415998764C29aB2a25CbeA6254146D50D22687'; LLTV='965000000000000000'
+          MARKET='0x6aa81f51dfc955df598e18006deae56ce907ac02b0b5358705f1a28fcea23cc0'; BORROWER='0x10c53e75fE7A7E6bF58a9e68B6a30Fcc7D4e6e2c'
+          EOA='0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
+          MIN_PROFIT='50000000000000000' # 0.05 WETH; deliberately below the ~0.167 WETH route screen.
+
+          anvil --fork-url "$REMOTE" --chain-id 8453 --port 8545 --silent >/tmp/anvil.log 2>&1 & PID=$!; trap 'kill $PID 2>/dev/null || true' EXIT
+          for i in {1..30}; do cast block-number --rpc-url "$LOCAL" >/dev/null 2>&1 && break; sleep 1; done
+          echo "FORK_BLOCK=$(cast block-number --rpc-url "$LOCAL")"
+
+          DEPLOY=$(forge create --rpc-url "$LOCAL" --from "$EOA" --unlocked --broadcast --json \
+            contracts/MorphoSelfFundedLiquidatorV2.sol:MorphoSelfFundedLiquidatorV2 \
+            --constructor-args "$MORPHO" "$UNI_ROUTER" "$AERO_ROUTER")
+          echo "$DEPLOY"
+          LIQUIDATOR=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["deployedTo"])' <<<"$DEPLOY")
+          echo "LIQUIDATOR=$LIQUIDATOR"
+
+          CW0=$(cast call "$WETH" 'balanceOf(address)(uint256)' "$LIQUIDATOR" --rpc-url "$LOCAL" | awk '{print $1}')
+          CC0=$(cast call "$WSTETH" 'balanceOf(address)(uint256)' "$LIQUIDATOR" --rpc-url "$LOCAL" | awk '{print $1}')
+          OW0=$(cast call "$WETH" 'balanceOf(address)(uint256)' "$EOA" --rpc-url "$LOCAL" | awk '{print $1}')
+          echo "CONTRACT_WETH_BEFORE=$CW0 CONTRACT_WSTETH_BEFORE=$CC0 OWNER_WETH_BEFORE=$OW0"
+          [ "$CW0" = '0' ] && [ "$CC0" = '0' ] || { echo 'ZERO_PREFUND_PRECONDITION=false'; exit 1; }
+          echo 'ZERO_PREFUND_PRECONDITION=true'
+
+          # The live position is still healthy. Advance the fork only to test the exact future
+          # liquidation mechanics without pretending the profit exists on mainnet today.
+          cast rpc evm_increaseTime 518400 --rpc-url "$LOCAL" >/dev/null
+          cast rpc evm_mine --rpc-url "$LOCAL" >/dev/null
+          echo 'SIMULATED_TIME_ADVANCE_SECONDS=518400'
+
+          POS=$(cast call "$MORPHO" 'position(bytes32,address)(uint256,uint128,uint128)' "$MARKET" "$BORROWER" --rpc-url "$LOCAL")
+          echo "$POS"
+          SHARES=$(printf '%s\n' "$POS" | sed -n '2p' | awk '{print $1}')
+          echo "REPAID_SHARES_REQUEST=$SHARES"
+
+          OWNER_BEFORE=$(cast call "$WETH" 'balanceOf(address)(uint256)' "$EOA" --rpc-url "$LOCAL" | awk '{print $1}')
+          set +e
+          TX=$(cast send "$LIQUIDATOR" 'execute((address,address,address,address,uint256),address,uint256,uint8,int24,uint256,uint256,bytes32)(uint256)' \
+            "($WETH,$WSTETH,$ORACLE,$IRM,$LLTV)" "$BORROWER" "$SHARES" 2 1 0 "$MIN_PROFIT" "$MARKET" \
+            --from "$EOA" --unlocked --rpc-url "$LOCAL" --json 2>&1)
+          RC=$?
+          set -e
+          echo "$TX"
+          if [ "$RC" -ne 0 ]; then
+            echo 'END_TO_END_SELF_FUNDED_AERODROME=false'
+            exit 1
+          fi
+
+          OWNER_AFTER=$(cast call "$WETH" 'balanceOf(address)(uint256)' "$EOA" --rpc-url "$LOCAL" | awk '{print $1}')
+          CW1=$(cast call "$WETH" 'balanceOf(address)(uint256)' "$LIQUIDATOR" --rpc-url "$LOCAL" | awk '{print $1}')
+          CC1=$(cast call "$WSTETH" 'balanceOf(address)(uint256)' "$LIQUIDATOR" --rpc-url "$LOCAL" | awk '{print $1}')
+          PROFIT=$(python3 -c 'import sys; print(int(sys.argv[1])-int(sys.argv[2]))' "$OWNER_AFTER" "$OWNER_BEFORE")
+          GAS_USED=$(python3 -c 'import json,sys; o=json.loads(sys.argv[1]); print(int(o.get("gasUsed","0x0"),16) if isinstance(o.get("gasUsed"),str) else o.get("gasUsed",0))' "$TX" 2>/dev/null || echo 0)
+          GAS_PRICE=$(cast gas-price --rpc-url "$REMOTE" | awk '{print $1}')
+          GAS_COST=$(python3 -c 'import sys; print(int(sys.argv[1])*int(sys.argv[2]))' "$GAS_USED" "$GAS_PRICE")
+          NET=$(python3 -c 'import sys; print(int(sys.argv[1])-int(sys.argv[2]))' "$PROFIT" "$GAS_COST")
+          echo "OWNER_PROFIT_WEI=$PROFIT GAS_USED=$GAS_USED CURRENT_GAS_PRICE_WEI=$GAS_PRICE GAS_COST_WEI_SCREEN=$GAS_COST NET_AFTER_L2_GAS_WEI=$NET"
+          echo "CONTRACT_WETH_AFTER=$CW1 CONTRACT_WSTETH_AFTER=$CC1"
+          python3 - "$PROFIT" "$NET" "$GAS_USED" <<'PY'
+          import sys
+          p,n,g=map(int,sys.argv[1:])
+          print(f'OWNER_PROFIT_WETH={p/1e18:.9f}')
+          print(f'NET_AFTER_L2_GAS_WETH={n/1e18:.9f}')
+          print(f'GAS_USED={g}')
+          print('END_TO_END_SELF_FUNDED_AERODROME=' + ('true' if p>0 else 'false'))
+          PY
