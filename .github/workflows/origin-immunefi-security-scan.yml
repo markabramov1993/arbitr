@@ -42,6 +42,11 @@ jobs:
           corepack enable
           corepack prepare pnpm@10.18.3 --activate
 
+      - name: Configure GitHub dependencies over HTTPS
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+
       - name: Install Origin dependencies
         working-directory: origin-dollar/contracts
         run: pnpm install --frozen-lockfile
