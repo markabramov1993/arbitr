@@ -43,13 +43,11 @@ contract CbBtcArbForkTest {
     VmCbBtc constant VM = VmCbBtc(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     address constant USDC  = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
-    address constant CBBTC = 0xcbb7C0000ab88B473b1f5aFd9ef808440eed33bF;
+    address constant CBBTC = 0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf;
 
     address constant UNI_ROUTER  = 0x2626664c2603336E57B271c5C0b26F421741e481;
     address constant AERO_ROUTER = 0x698Cb2b6dd822994581fEa6eA4Fc755d1363A92F;
 
-    // Separate USDC-rich Uniswap WETH/USDC pool used only to fund the fork test.
-    // We never trade this pool in the tested cbBTC route.
     address constant FUNDING_HOLDER = 0xb4CB800910B228ED3d0834cF79D697127BBB00e5;
 
     event log_named_uint(string key, uint256 val);
@@ -102,8 +100,5 @@ contract CbBtcArbForkTest {
         emit log_named_uint("cbBTC_out_8dec", cbBtcOut);
         emit log_named_uint("final_USDC_6dec", finalUsdc);
         emit log_named_int("grossPnl_USDC_6dec", int256(finalUsdc) - int256(amountIn));
-
-        // Research test intentionally does not require profit: CI must report
-        // negative as well as positive observations instead of hiding them.
     }
 }
