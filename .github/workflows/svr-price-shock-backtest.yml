@@ -1,0 +1,55 @@
+name: SVR Price Shock Backtest
+
+on:
+  push:
+    paths:
+      - '.github/workflows/svr-price-shock-backtest.yml'
+  workflow_dispatch:
+
+jobs:
+  shock:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Compare hinted medianPrice to pre-update on-chain answer
+        shell: bash
+        run: |
+          set -euo pipefail
+          RPC='https://base-mainnet.g.alchemy.com/public'
+          python3 - <<'PY'
+          import json, subprocess
+          RPC='https://base-mainnet.g.alchemy.com/public'
+          auctions=[
+            ('81d7e91f-2fbc-4446-8156-ff075d9297ee','0x83f3425A5b32655DC645f7f4e422DD60E9741794',2511126115973709000000,50858710),
+            ('37c62e12-bb4b-489e-84d7-6bfffca85914','0x83f3425A5b32655DC645f7f4e422DD60E9741794',2511126115973709000000,50858710),
+            ('483f9c70-ebc7-4f0d-b0d8-eb8a761dd023','0xD772F6D9b7A35cb96fDdFE569964ab1C05017BF9',251114474568,50858710),
+            ('9e11cc56-0d27-4be3-8529-9ca95e61b32f','0xD772F6D9b7A35cb96fDdFE569964ab1C05017BF9',251114474568,50858711),
+            ('dde08267-0c75-47d7-a9bd-cc0100ba7121','0xeb3Ad4395924b76eB64b3d6aBabA0B62875b1A1f',80839263468990000000000,50858715),
+            ('9126d2d4-a755-4c81-b989-04782d76a6fb','0xeb3Ad4395924b76eB64b3d6aBabA0B62875b1A1f',80839263468990000000000,50858715),
+          ]
+          def call(addr,sig,block):
+              cmd=['cast','call',addr,sig,'--block',str(block),'--rpc-url',RPC]
+              return subprocess.check_output(cmd,text=True,stderr=subprocess.STDOUT).strip()
+          def firstint(s): return int(s.split()[0],0)
+          for aid,agg,median,deadline in auctions:
+              b=deadline-1
+              desc='?'; dec=None; old=None
+              try: desc=call(agg,'description()(string)',b).strip('"')
+              except Exception as e: desc='UNAVAILABLE'
+              try: dec=firstint(call(agg,'decimals()(uint8)',b))
+              except Exception: pass
+              # latestAnswer is available on the OCR aggregator contracts used here.
+              try: old=firstint(call(agg,'latestAnswer()(int256)',b))
+              except Exception:
+                  try:
+                      old=firstint(call(agg,'latestRoundData()(uint80,int256,uint256,uint256,uint80)',b).splitlines()[1])
+                  except Exception: pass
+              delta=None if not old else (median-old)/old*100
+              out={'auction_id':aid,'aggregator':agg,'block_before':b,'description':desc,'decimals':dec,'pre_answer':old,'hinted_median':median,'delta_pct':delta}
+              if dec is not None:
+                  out['pre_human']=None if old is None else old/(10**dec)
+                  out['hint_human']=median/(10**dec)
+              print(json.dumps(out,separators=(',',':')))
+          PY
