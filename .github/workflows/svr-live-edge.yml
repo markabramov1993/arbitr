@@ -1,0 +1,28 @@
+name: SVR Live Edge Sampler
+
+on:
+  push:
+    paths:
+      - 'scripts/svr_live_edge.py'
+      - '.github/workflows/svr-live-edge.yml'
+      - 'trigger-svr-live-edge.txt'
+  workflow_dispatch:
+
+jobs:
+  sample:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m pip install --user 'websockets>=14,<16'
+      - name: Capture Base SVR pre-update edges
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 scripts/svr_live_edge.py 2>&1 | tee svr-live-edge.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: svr-live-edge
+          path: svr-live-edge.log
+          retention-days: 30
