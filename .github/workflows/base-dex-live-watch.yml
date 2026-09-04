@@ -31,7 +31,7 @@ jobs:
         with:
           version: stable
 
-      - name: Read-only staged DEX scan
+      - name: Read-only spot-edge scan
         shell: bash
         run: |
           set -o pipefail
@@ -39,17 +39,17 @@ jobs:
           echo '=== SCAN SUMMARY ==='
           grep '"kind":"summary"' base-dex-live-scan.jsonl | tail -1 || true
 
-      - name: Generate exact local-fork route test
+      - name: Generate fork execution search
         shell: bash
         run: |
           set -euo pipefail
           rm -rf dexwatch
           forge init dexwatch --force --empty >/dev/null
           python3 scripts/generate_base_dex_fork_test.py base-dex-live-scan.jsonl dexwatch/test/GeneratedBaseDexArb.t.sol | tee dex-generator.log
-          echo '=== CANDIDATE ==='
+          echo '=== SHORTLIST ==='
           cat dex-candidate.json
 
-      - name: Execute best positive quote on fresh Base fork
+      - name: Execute shortlisted routes on independent fresh Base forks
         shell: bash
         run: |
           set +e
@@ -66,18 +66,9 @@ jobs:
         shell: bash
         run: |
           echo '=== EXECUTION SIGNAL ==='
-          HAS=$(python3 - <<'PY'
-          import json
-          try:
-              x=json.load(open('dex-candidate.json'))
-          except Exception:
-              x=None
-          print('true' if x else 'false')
-          PY
-          )
           RC=$(cat base-dex-fork-exit.txt 2>/dev/null || echo 99)
-          grep -E 'FORK_GROSS_PNL_USDC_RAW|QUOTE_GROSS_PNL_USDC_RAW|ASSET|BUY_VENUE|SELL_VENUE' base-dex-fork-validation.log || true
-          if [ "$HAS" = 'true' ] && [ "$RC" = '0' ] && grep -q 'testBestPositiveQuoteOnLatestFork()' base-dex-fork-validation.log && grep -q '\[PASS\]' base-dex-fork-validation.log; then
+          grep -E 'EDGE_COUNT|SIZE_COUNT|FORK_PROFITABLE_COUNT|POSITIVE_ROUTE|ROUTE_INDEX|ASSET|AMOUNT_IN_USDC_RAW|BUY_IS_UNI|BUY_TIER|SELL_IS_UNI|SELL_TIER|FORK_GROSS_PNL_USDC_RAW|SPOT_EDGE_BPS_E6' base-dex-fork-validation.log || true
+          if [ "$RC" = '0' ] && grep -Eq 'FORK_PROFITABLE_COUNT: [1-9][0-9]*' base-dex-fork-validation.log; then
             echo 'DEX_FORK_SURVIVED=true'
           else
             echo 'DEX_FORK_SURVIVED=false'
