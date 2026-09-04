@@ -1,0 +1,107 @@
+name: Morpho Top cbXRP Token Flow
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - '.github/workflows/morpho-top-cbxrp-flow.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  flow:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Reconstruct liquidator ERC20 flow and WETH withdrawals
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' | tee cbxrp-flow.jsonl
+          import json, subprocess, collections
+          RPC='https://base-mainnet.g.alchemy.com/public'
+          TX='0xd5b587661551663ad6fb49f9dc99f5a98cdbe24abb4aa9de49ab6481cd6fffb3'
+          BLOCK=50774916
+          LIQ='0x2ea89fc4b65ed6fa0494b6c9b15403bf1137907f'.lower()
+          WETH='0x4200000000000000000000000000000000000006'.lower()
+          ETH_USDC_ORACLE='0xFEa2D58cEfCb9fcb597723c6bAE66fFE4193aFE4'
+          TRANSFER='0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
+          WITHDRAWAL='0x7fcf532c15f0a6db0bd6d0e038bea71d30d808c7d98cb3bf7268a95bf5081b65'
+          def rpc(method,*args):
+              out=subprocess.check_output(['cast','rpc',method,*args,'--rpc-url',RPC],text=True)
+              return json.loads(out)
+          r=rpc('eth_getTransactionReceipt',TX)
+          meta={}
+          def tokmeta(a):
+              a=a.lower()
+              if a in meta:return meta[a]
+              sym=a[:10];dec=18
+              try:
+                  s=subprocess.check_output(['cast','call',a,'symbol()(string)','--block',str(BLOCK),'--rpc-url',RPC],text=True,stderr=subprocess.DEVNULL).strip()
+                  if s:sym=s.strip('"')
+              except:pass
+              try:
+                  d=subprocess.check_output(['cast','call',a,'decimals()(uint8)','--block',str(BLOCK),'--rpc-url',RPC],text=True,stderr=subprocess.DEVNULL).strip()
+                  dec=int(d.split()[0],0)
+              except:pass
+              meta[a]=(sym,dec);return meta[a]
+          delta=collections.defaultdict(int); transfers=[]; withdrawals=[]
+          for log in r['logs']:
+              a=log['address'].lower(); topics=log.get('topics') or []
+              if topics and topics[0].lower()==TRANSFER and len(topics)>=3:
+                  frm='0x'+topics[1][-40:].lower();to='0x'+topics[2][-40:].lower();value=int(log['data'],16)
+                  if frm==LIQ:delta[a]-=value
+                  if to==LIQ:delta[a]+=value
+                  if frm==LIQ or to==LIQ:
+                      sym,dec=tokmeta(a)
+                      transfers.append({'token':a,'symbol':sym,'decimals':dec,'from':frm,'to':to,'raw':value,'human':value/(10**dec),'logIndex':int(log['logIndex'],16)})
+              if a==WETH and topics and topics[0].lower()==WITHDRAWAL and len(topics)>=2:
+                  src='0x'+topics[1][-40:].lower();value=int(log['data'],16)
+                  if src==LIQ:
+                      withdrawals.append({'raw':value,'eth':value/1e18,'logIndex':int(log['logIndex'],16)})
+          print(json.dumps({'tx':TX,'block':BLOCK,'liquidator':LIQ,'gasUsed':int(r['gasUsed'],16),'effectiveGasPrice':int(r['effectiveGasPrice'],16),'l1FeeWei':int(r.get('l1Fee','0x0'),16)}))
+          for x in transfers:print(json.dumps({'TRANSFER':x},separators=(',',':')))
+          for a,v in delta.items():
+              sym,dec=tokmeta(a);print(json.dumps({'TOKEN_NET_FROM_TRANSFER_LOGS':{'token':a,'symbol':sym,'raw':v,'human':v/(10**dec)}},separators=(',',':')))
+          total_withdraw=sum(x['raw'] for x in withdrawals)
+          for x in withdrawals:print(json.dumps({'WETH_WITHDRAWAL_TO_ETH':x},separators=(',',':')))
+          # Historical Morpho WETH/USDC oracle: WETH wei * price / 1e36 = USDC base units.
+          ptxt=subprocess.check_output(['cast','call',ETH_USDC_ORACLE,'price()(uint256)','--block',str(BLOCK),'--rpc-url',RPC],text=True).strip()
+          price=int(ptxt.split()[0],0)
+          withdrawal_usdc_raw=total_withdraw*price//10**36
+          print(json.dumps({'FINAL_WETH_WITHDRAWAL':{'raw':total_withdraw,'eth':total_withdraw/1e18,'historical_oracle_usdc':withdrawal_usdc_raw/1e6,'oracleRaw':price}},separators=(',',':')))
+          # Ask the public RPC for a call trace if supported; failure is non-fatal.
+          try:
+              tr=subprocess.check_output(['cast','rpc','debug_traceTransaction',TX,'{"tracer":"callTracer"}','--rpc-url',RPC],text=True,stderr=subprocess.STDOUT,timeout=30)
+              open('cbxrp-calltrace.json','w').write(tr)
+              print(json.dumps({'CALL_TRACE':'available'}))
+          except Exception as e:
+              open('cbxrp-calltrace.json','w').write('unavailable')
+              print(json.dumps({'CALL_TRACE':'unavailable','reason':str(e)[:180]}))
+          PY
+      - name: Decode custom executor topics/selectors best effort
+        shell: bash
+        run: |
+          set +e
+          {
+            echo 'executor selector:'
+            cast 4byte 0x4317ca01
+            echo 'custom liquidator event topic:'
+            cast 4byte-event 0x357d905f1831209797df4d55d79c5c5bf1d9f7311c976afd05e13d881eab9bc8
+          } | tee cbxrp-signatures.txt
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbxrp-token-flow
+          path: |
+            cbxrp-flow.jsonl
+            cbxrp-calltrace.json
+            cbxrp-signatures.txt
+          retention-days: 30
