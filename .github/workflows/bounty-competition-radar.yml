@@ -12,6 +12,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: bounty-competition-radar
+  cancel-in-progress: true
+
 jobs:
   scan:
     runs-on: ubuntu-24.04
