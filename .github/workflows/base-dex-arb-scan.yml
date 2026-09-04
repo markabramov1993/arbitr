@@ -1,0 +1,32 @@
+name: Base DEX Arb Scan
+
+on:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - 'scripts/base_dex_arb_scan.py'
+      - '.github/workflows/base-dex-arb-scan.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Scan Uniswap V3 vs Aerodrome Slipstream
+        shell: bash
+        run: python3 scripts/base_dex_arb_scan.py | tee base-dex-arb.jsonl
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: base-dex-arb-evidence
+          path: base-dex-arb.jsonl
+          retention-days: 30
