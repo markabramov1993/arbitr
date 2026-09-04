@@ -1,0 +1,105 @@
+name: Superteam Agent Radar
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/superteam-agent-radar.yml'
+  schedule:
+    - cron: '4,19,34,49 * * * *'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: superteam-agent-radar
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Discover current agent-eligible Superteam listings through public-feed workaround
+        id: scan
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl -L -fsS 'https://earn.superteam.fun/api/listings?take=100' -o listings.json
+          python3 - <<'PY' | tee superteam-agent-radar.md
+          import json,datetime,os
+          d=json.load(open('listings.json'))
+          rows=d if isinstance(d,list) else d.get('listings',d.get('data',d.get('items',[])))
+          if isinstance(rows,dict): rows=rows.get('data',rows.get('items',[]))
+          now=datetime.datetime.now(datetime.timezone.utc)
+          out=[]
+          for x in rows if isinstance(rows,list) else []:
+              status=str(x.get('status','')).upper()
+              access=str(x.get('agentAccess','')).upper()
+              if status!='OPEN' or access not in {'AGENT_ALLOWED','AGENT_ONLY'}: continue
+              deadline=x.get('deadline') or x.get('submissionDeadline')
+              if deadline:
+                  try:
+                      dt=datetime.datetime.fromisoformat(deadline.replace('Z','+00:00'))
+                      if dt<now: continue
+                  except: pass
+              total=0.0
+              for k in ('reward','totalReward','totalPrize','totalPrizes','amount','compensation'):
+                  v=x.get(k)
+                  if isinstance(v,(int,float)): total=max(total,float(v))
+              rewards=x.get('rewards')
+              if isinstance(rewards,dict):
+                  for v in rewards.values():
+                      if isinstance(v,(int,float)): total=max(total,float(v))
+              out.append((total,x))
+          out.sort(key=lambda p:p[0],reverse=True)
+          print('# Superteam agent-eligible live radar')
+          print('\nUTC:',now.isoformat())
+          print('\nEligible live listings:',len(out))
+          for total,x in out[:30]:
+              print('\n## '+str(x.get('title')))
+              print('- id:',x.get('id'))
+              print('- slug:',x.get('slug'))
+              print('- agentAccess:',x.get('agentAccess'))
+              print('- status:',x.get('status'))
+              print('- deadline:',x.get('deadline') or x.get('submissionDeadline'))
+              print('- reward_detected:',total)
+              print('- token:',x.get('token') or x.get('rewardToken') or x.get('compensationToken'))
+              print('- type:',x.get('type'))
+          max_reward=max([x[0] for x in out] or [0])
+          print('\nMAX_AGENT_REWARD_DETECTED='+str(max_reward))
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              f.write('count='+str(len(out))+'\n')
+              f.write('max_reward='+str(max_reward)+'\n')
+          PY
+
+      - name: Create/update agent-work alert
+        if: steps.scan.outputs.count != '0'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TITLE='[RADAR] Superteam agent-eligible work'
+          BODY=$(cat superteam-agent-radar.md)
+          NUM=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$NUM" ]; then
+            gh issue edit "$NUM" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
+          fi
+
+      - name: Upload snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: superteam-agent-radar
+          path: |
+            superteam-agent-radar.md
+            listings.json
+          retention-days: 7
+          if-no-files-found: warn
