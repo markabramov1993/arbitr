@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Fast spot-spread shortlist; full Quoter simulation follows only positive edges.
 from __future__ import annotations
 import json, subprocess
 
@@ -25,13 +26,9 @@ def pool_price(pool, a_sym, b_sym):
  t0=addr(call(pool,'token0()(address)')).lower()
  sq=first(call(pool,'slot0()(uint160,int24,uint16,uint16,uint16,bool)'))
  raw=(sq*sq)/(2**192)
- # raw is token1 raw units per token0 raw unit. Convert to human.
  if t0==a.lower():
-  price_b_per_a=raw*(10**ad)/(10**bd)
- else:
-  # raw = Araw/Braw; invert for B per A and adjust decimals.
-  price_b_per_a=(1/raw)*(10**ad)/(10**bd)
- return price_b_per_a
+  return raw*(10**ad)/(10**bd)
+ return (1/raw)*(10**ad)/(10**bd)
 
 def main():
  try:
