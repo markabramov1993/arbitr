@@ -33,121 +33,75 @@ jobs:
           mkdir -p livewatch/test
           cd livewatch
           forge init --force --empty >/dev/null
-          forge install foundry-rs/forge-std --no-git >/dev/null
 
           python3 - <<'PY'
           import json, urllib.request, time
-
           API='https://api.morpho.org/graphql'
-          WATCH_LOANS={
-              '0x4200000000000000000000000000000000000006',
-              '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
-          }
-
+          WATCH_LOANS={'0x4200000000000000000000000000000000000006','0x833589fcd6edb6e08f4c7c32d4f71b54bda02913'}
           def gql(q):
               req=urllib.request.Request(API,data=json.dumps({'query':q}).encode(),headers={'content-type':'application/json','user-agent':'profit-engine-live-watch'})
-              with urllib.request.urlopen(req,timeout=30) as r:
-                  out=json.loads(r.read())
-              if out.get('errors'):
-                  raise RuntimeError(out['errors'])
+              with urllib.request.urlopen(req,timeout=30) as r: out=json.loads(r.read())
+              if out.get('errors'): raise RuntimeError(out['errors'])
               return out['data']
-
           mq='''query { markets(first: 100, orderBy: SupplyAssetsUsd, orderDirection: Desc, where: { chainId_in: [8453], listed: true }) { items { marketId lltv loanAsset { address symbol decimals } collateralAsset { address symbol decimals } oracle { address } irmAddress } } }'''
           markets=[m for m in gql(mq)['markets']['items'] if m['loanAsset']['address'].lower() in WATCH_LOANS]
-          candidates=[]
-          checked=0
+          candidates=[]; checked=0
           for m in markets:
               mid=m['marketId']
               pq=f'''query {{ marketPositions(first: 80, orderBy: BorrowShares, orderDirection: Desc, where: {{ marketUniqueKey_in: ["{mid}"] }}) {{ items {{ user {{ address }} state {{ borrowShares borrowAssetsUsd collateral collateralUsd }} }} }} }}'''
-              try:
-                  ps=gql(pq)['marketPositions']['items']
+              try: ps=gql(pq)['marketPositions']['items']
               except Exception as e:
-                  print('POSITION_QUERY_FAILED', mid, str(e)[:120])
-                  continue
-              checked += len(ps)
-              lltv=int(m['lltv'])/1e18
+                  print('POSITION_QUERY_FAILED',mid,str(e)[:120]); continue
+              checked += len(ps); lltv=int(m['lltv'])/1e18
               for p in ps:
-                  s=p['state']
-                  debt=float(s.get('borrowAssetsUsd') or 0)
-                  coll=float(s.get('collateralUsd') or 0)
-                  if debt<=0 or coll<=0:
-                      continue
+                  s=p['state']; debt=float(s.get('borrowAssetsUsd') or 0); coll=float(s.get('collateralUsd') or 0)
+                  if debt<=0 or coll<=0: continue
                   hf=coll*lltv/debt
                   if hf <= 1.003:
-                      candidates.append({'hf':hf,'debt':debt,'user':p['user']['address'],'market':mid,'loan':m['loanAsset']['address'],'loanSymbol':m['loanAsset']['symbol'],'loanDec':int(m['loanAsset']['decimals']),'coll':m['collateralAsset']['address'],'collSymbol':m['collateralAsset']['symbol'],'collDec':int(m['collateralAsset']['decimals']),'oracle':m['oracle']['address'],'irm':m['irmAddress'],'lltv':int(m['lltv'])})
+                      candidates.append({'hf':hf,'debt':debt,'user':p['user']['address'],'market':mid,'loan':m['loanAsset']['address'],'loanDec':int(m['loanAsset']['decimals']),'coll':m['collateralAsset']['address'],'oracle':m['oracle']['address'],'irm':m['irmAddress'],'lltv':int(m['lltv'])})
               time.sleep(.015)
-
-          candidates.sort(key=lambda x:(x['hf'],-x['debt']))
-          candidates=candidates[:24]
+          candidates.sort(key=lambda x:(x['hf'],-x['debt'])); candidates=candidates[:24]
           print('MARKETS_SCANNED',len(markets),'POSITIONS_CHECKED',checked,'API_NEAR_LIQUIDATION',len(candidates))
-          for c in candidates:
-              print('API_CANDIDATE',json.dumps(c,separators=(',',':')))
-
+          for c in candidates: print('API_CANDIDATE',json.dumps(c,separators=(',',':')))
           def addr(x): return f'address(uint160({int(x,16)}))'
           rows=[]
           for i,c in enumerate(candidates):
               rows.append(f"cs[{i}]=Candidate(bytes32({c['market']}),{addr(c['user'])},{addr(c['loan'])},{addr(c['coll'])},{addr(c['oracle'])},{addr(c['irm'])},{c['lltv']},{c['loanDec']},{int(c['hf']*1e18)},{int(c['debt']*1e6)});")
-
           source=f'''// SPDX-License-Identifier: MIT
           pragma solidity ^0.8.24;
           import "forge-std/Test.sol";
           struct MarketParams {{ address loanToken; address collateralToken; address oracle; address irm; uint256 lltv; }}
-          interface IMorpho {{
-              function position(bytes32,address) external view returns(uint256,uint128,uint128);
-              function liquidate(MarketParams memory,address,uint256,uint256,bytes calldata) external returns(uint256,uint256);
-          }}
+          interface IMorpho {{ function position(bytes32,address) external view returns(uint256,uint128,uint128); function liquidate(MarketParams memory,address,uint256,uint256,bytes calldata) external returns(uint256,uint256); }}
           interface IERC20 {{ function approve(address,uint256) external returns(bool); function balanceOf(address) external view returns(uint256); }}
           interface IOracle {{ function price() external view returns(uint256); }}
           contract ProfitEngineLiveWatchTest is Test {{
               address constant MORPHO=address(uint160(1071767867375834718561649552532670117991385333707));
               struct Candidate {{ bytes32 id; address user; address loan; address coll; address oracle; address irm; uint256 lltv; uint8 loanDec; uint256 apiHfE18; uint256 debtUsdE6; }}
-              event CandidateResult(uint256 indexed index,address indexed borrower,bytes32 indexed market,address loan,address collateral,uint256 repaid,uint256 seized,uint256 grossLoanRaw,uint8 loanDecimals,uint256 apiHfE18,uint256 debtUsdE6);
               function candidates() internal pure returns(Candidate[] memory cs) {{ cs=new Candidate[]({len(candidates)}); {''.join(rows)} }}
               function testLiveWatch() external {{
                   vm.createSelectFork("https://base-mainnet.g.alchemy.com/public");
-                  Candidate[] memory cs=candidates();
-                  uint256 successCount;
+                  Candidate[] memory cs=candidates(); uint256 successCount;
                   emit log_named_uint("CANDIDATE_COUNT",cs.length);
-                  for(uint256 i=0;i<cs.length;i++) if (_tryCandidate(cs[i],i)) successCount++;
+                  for(uint256 i=0;i<cs.length;i++) if(_tryCandidate(cs[i],i)) successCount++;
                   emit log_named_uint("EXECUTABLE_CANDIDATE_COUNT",successCount);
               }}
               function _tryCandidate(Candidate memory c,uint256 idx) internal returns(bool) {{
                   (,uint128 shares,uint128 collateral)=IMorpho(MORPHO).position(c.id,c.user);
                   if(shares==0 || collateral==0) return false;
-                  deal(c.loan,address(this),type(uint128).max);
-                  IERC20(c.loan).approve(MORPHO,type(uint256).max);
-                  MarketParams memory p=MarketParams(c.loan,c.coll,c.oracle,c.irm,c.lltv);
-                  uint256 beforeColl=IERC20(c.coll).balanceOf(address(this));
+                  deal(c.loan,address(this),type(uint128).max); IERC20(c.loan).approve(MORPHO,type(uint256).max);
+                  MarketParams memory p=MarketParams(c.loan,c.coll,c.oracle,c.irm,c.lltv); uint256 beforeColl=IERC20(c.coll).balanceOf(address(this));
                   try IMorpho(MORPHO).liquidate(p,c.user,0,uint256(shares),"") returns(uint256 seized,uint256 repaid) {{ return _record(c,idx,beforeColl,seized,repaid); }}
                   catch Error(string memory reason) {{
                       if(keccak256(bytes(reason))==keccak256(bytes("position is healthy"))) return false;
                       try IMorpho(MORPHO).liquidate(p,c.user,uint256(collateral),0,"") returns(uint256 seized2,uint256 repaid2) {{ return _record(c,idx,beforeColl,seized2,repaid2); }} catch {{ return false; }}
                   }}
-                  catch {{
-                      try IMorpho(MORPHO).liquidate(p,c.user,uint256(collateral),0,"") returns(uint256 seized3,uint256 repaid3) {{ return _record(c,idx,beforeColl,seized3,repaid3); }} catch {{ return false; }}
-                  }}
+                  catch {{ try IMorpho(MORPHO).liquidate(p,c.user,uint256(collateral),0,"") returns(uint256 seized3,uint256 repaid3) {{ return _record(c,idx,beforeColl,seized3,repaid3); }} catch {{ return false; }} }}
               }}
               function _record(Candidate memory c,uint256 idx,uint256 beforeColl,uint256 seized,uint256 repaid) internal returns(bool) {{
-                  uint256 got=IERC20(c.coll).balanceOf(address(this))-beforeColl;
-                  uint256 price=IOracle(c.oracle).price();
-                  uint256 valueLoanRaw=got*price/1e36;
-                  uint256 gross=valueLoanRaw>repaid ? valueLoanRaw-repaid : 0;
-                  emit CandidateResult(idx,c.user,c.id,c.loan,c.coll,repaid,seized,gross,c.loanDec,c.apiHfE18,c.debtUsdE6);
-                  emit log_named_uint("EXECUTABLE_CANDIDATE",1);
-                  emit log_named_address("BORROWER",c.user);
-                  emit log_named_bytes32("MARKET",c.id);
-                  emit log_named_address("LOAN_TOKEN",c.loan);
-                  emit log_named_address("COLLATERAL_TOKEN",c.coll);
-                  emit log_named_uint("REPAID_RAW",repaid);
-                  emit log_named_uint("SEIZED_RAW",seized);
-                  emit log_named_uint("GROSS_INCENTIVE_LOAN_RAW",gross);
-                  emit log_named_uint("LOAN_DECIMALS",c.loanDec);
-                  emit log_named_uint("API_HF_E18",c.apiHfE18);
-                  emit log_named_uint("API_DEBT_USD_E6",c.debtUsdE6);
-                  return true;
+                  uint256 got=IERC20(c.coll).balanceOf(address(this))-beforeColl; uint256 price=IOracle(c.oracle).price(); uint256 valueLoanRaw=got*price/1e36; uint256 gross=valueLoanRaw>repaid?valueLoanRaw-repaid:0;
+                  emit log_named_uint("EXECUTABLE_CANDIDATE",1); emit log_named_uint("INDEX",idx); emit log_named_address("BORROWER",c.user); emit log_named_bytes32("MARKET",c.id); emit log_named_address("LOAN_TOKEN",c.loan); emit log_named_address("COLLATERAL_TOKEN",c.coll); emit log_named_uint("REPAID_RAW",repaid); emit log_named_uint("SEIZED_RAW",seized); emit log_named_uint("GROSS_INCENTIVE_LOAN_RAW",gross); emit log_named_uint("LOAN_DECIMALS",c.loanDec); emit log_named_uint("API_HF_E18",c.apiHfE18); emit log_named_uint("API_DEBT_USD_E6",c.debtUsdE6); return true;
               }}
-          }}
-          '''
+          }}'''
           open('test/ProfitEngineLiveWatch.t.sol','w').write(source)
           PY
 
