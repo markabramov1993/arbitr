@@ -26,13 +26,21 @@ jobs:
           p=Path('target/README.md')
           s=p.read_text()
           anchor='| `PUBLIC_MERCHANT_ADDRESS`             | no       | Display-only merchant wallet (on-chain value is authoritative) |'
-          rows='''| `NEXT_PUBLIC_EMAILJS_SERVICE_ID`      | yes      | EmailJS service ID for OTP and notifications |\n| `NEXT_PUBLIC_EMAILJS_TEMPLATE_ID`     | yes      | EmailJS template ID for OTP and notifications |\n| `NEXT_PUBLIC_EMAILJS_PUBLIC_KEY`      | yes      | EmailJS public key used by the browser client |\n| `NEXT_PUBLIC_DEFAULT_RECIPIENT_EMAIL` | no       | Default recipient for contact-form email |'''
+          rows='''| `NEXT_PUBLIC_EMAILJS_SERVICE_ID`      | yes      | EmailJS service ID for OTP and notifications |
+| `NEXT_PUBLIC_EMAILJS_TEMPLATE_ID`     | yes      | EmailJS template ID for OTP and notifications |
+| `NEXT_PUBLIC_EMAILJS_PUBLIC_KEY`      | yes      | EmailJS public key used by the browser client |
+| `NEXT_PUBLIC_DEFAULT_RECIPIENT_EMAIL` | no       | Default recipient for contact-form email |'''
           if anchor not in s: raise SystemExit('README anchor not found')
           p.write_text(s.replace(anchor, anchor+'\n'+rows, 1))
           PY
-      - name: Assert four EmailJS rows
+      - name: Assert all four documented variables
         working-directory: target
-        run: test "$(grep -c 'EMAILJS' README.md)" -eq 4
+        shell: bash
+        run: |
+          for v in NEXT_PUBLIC_EMAILJS_SERVICE_ID NEXT_PUBLIC_EMAILJS_TEMPLATE_ID NEXT_PUBLIC_EMAILJS_PUBLIC_KEY NEXT_PUBLIC_DEFAULT_RECIPIENT_EMAIL; do
+            grep -q "$v" README.md
+          done
+          test "$(grep -c 'NEXT_PUBLIC_EMAILJS_' README.md)" -eq 3
       - name: Install dependencies
         working-directory: target
         run: npm ci
