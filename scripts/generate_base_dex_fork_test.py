@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Generate a Foundry test for the best positive Base DEX quote.
+"""Generate a real-swap Foundry search from positive Base DEX spot edges.
 
-Input: JSONL emitted by base_dex_live_scan.py.
-Output: a Solidity test that executes the exact two swaps on a fresh Base fork.
-This is local-fork validation only; it never signs or broadcasts a transaction.
+The generated test:
+- creates a fresh latest Base fork for every route/size attempt;
+- funds only the local fork test contract with USDC via Foundry deal();
+- executes the actual Uniswap V3 / Aerodrome Slipstream V3 router calls;
+- measures final USDC and emits only fork-surviving positive routes.
+
+No mainnet key, signature or transaction broadcast is involved.
 """
 from __future__ import annotations
 
@@ -12,7 +16,6 @@ import pathlib
 import sys
 
 UNI_ROUTER = "0x2626664c2603336E57B271c5C0b26F421741e481"
-# Router observed executing current Aerodrome concentrated-liquidity swaps on Base.
 AERO_ROUTER = "0x698Cb2b6dd822994581fEa6eA4Fc755d1363A92F"
 USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 TOKENS = {
@@ -20,106 +23,180 @@ TOKENS = {
     "cbBTC": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
     "cbXRP": "0xcb585250f852C6c6bf90434AB21A00f02833a4af",
 }
+SIZES = (100, 500, 1_000, 2_500, 5_000, 10_000)
+MAX_EDGES = 4
 
 
-def load_best(path: pathlib.Path):
-    candidates = []
+def load_edges(path: pathlib.Path):
+    rows = []
     for line in path.read_text().splitlines():
         try:
             row = json.loads(line)
         except Exception:
             continue
-        if row.get("kind") == "exact_route" and float(row.get("gross_usdc", 0)) > 0:
-            candidates.append(row)
-    candidates.sort(key=lambda r: float(r.get("gross_usdc", 0)), reverse=True)
-    return candidates[0] if candidates else None
+        if row.get("kind") != "spot_edge":
+            continue
+        asset = row.get("asset") or str(row.get("pair", "")).split("/")[0]
+        if asset not in TOKENS:
+            continue
+        edge = float(row.get("spot_edge_bps_before_slippage_gas", -1e99))
+        if edge <= 0:
+            continue
+        if row.get("buy_venue") == row.get("sell_venue"):
+            continue
+        row = dict(row)
+        row["asset"] = asset
+        rows.append(row)
+    rows.sort(key=lambda r: float(r["spot_edge_bps_before_slippage_gas"]), reverse=True)
+
+    # Deduplicate exact venue/tier direction.
+    out = []
+    seen = set()
+    for r in rows:
+        key = (r["asset"], r["buy_venue"], int(r["buy_tier"]), r["sell_venue"], int(r["sell_tier"]))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(r)
+        if len(out) >= MAX_EDGES:
+            break
+    return out
 
 
-def swap_code(venue: str, tier: int, token_in: str, token_out: str, amount_expr: str, out_var: str) -> str:
-    if venue == "uni":
-        return f'''
-        IERC20Dex({token_in}).approve(UNI_ROUTER, {amount_expr});
-        uint256 {out_var} = IUniRouterDex(UNI_ROUTER).exactInputSingle(
-            IUniRouterDex.ExactInputSingleParams({{
-                tokenIn: {token_in}, tokenOut: {token_out}, fee: {tier},
-                recipient: address(this), amountIn: {amount_expr}, amountOutMinimum: 0,
-                sqrtPriceLimitX96: 0
-            }})
-        );'''
-    if venue == "aero":
-        return f'''
-        IERC20Dex({token_in}).approve(AERO_ROUTER, {amount_expr});
-        uint256 {out_var} = IAeroRouterDex(AERO_ROUTER).exactInputSingle(
-            IAeroRouterDex.ExactInputSingleParams({{
-                tokenIn: {token_in}, tokenOut: {token_out}, tickSpacing: {tier},
-                recipient: address(this), deadline: block.timestamp,
-                amountIn: {amount_expr}, amountOutMinimum: 0, sqrtPriceLimitX96: 0
-            }})
-        );'''
-    raise ValueError(f"unsupported venue: {venue}")
+def addr(x: str) -> str:
+    return f"address(uint160({int(x, 16)}))"
 
 
-def render(best) -> str:
-    if not best:
-        return '''// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
-import "forge-std/Test.sol";
-contract GeneratedBaseDexArbTest is Test {
-    function testNoPositiveQuote() external { emit log_string("NO_POSITIVE_QUOTE"); }
-}
-'''
-
-    asset_sym = best["asset"]
-    asset = TOKENS[asset_sym]
-    amount_in = int(best["amount_in_raw"])
-    buy_venue = best["buy_venue"]
-    sell_venue = best["sell_venue"]
-    buy_tier = int(best["buy_tier"])
-    sell_tier = int(best["sell_tier"])
-    qgross_raw = int(best["final_raw"]) - amount_in
-
-    first = swap_code(buy_venue, buy_tier, "USDC", "ASSET", "amountIn", "assetOut")
-    second = swap_code(sell_venue, sell_tier, "ASSET", "USDC", "assetOut", "finalUsdc")
+def render(edges) -> str:
+    candidate_lines = []
+    for i, r in enumerate(edges):
+        candidate_lines.append(
+            "cs[{i}] = Candidate({asset},{buy_uni},{buy_tier},{sell_uni},{sell_tier},{spot});".format(
+                i=i,
+                asset=addr(TOKENS[r["asset"]]),
+                buy_uni="true" if r["buy_venue"] == "uni" else "false",
+                buy_tier=int(r["buy_tier"]),
+                sell_uni="true" if r["sell_venue"] == "uni" else "false",
+                sell_tier=int(r["sell_tier"]),
+                spot=max(0, int(round(float(r["spot_edge_bps_before_slippage_gas"]) * 1_000_000))),
+            )
+        )
+    size_values = ",".join(str(x * 1_000_000) for x in SIZES)
 
     return f'''// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 import "forge-std/Test.sol";
 
-interface IERC20Dex {{ function approve(address,uint256) external returns(bool); function balanceOf(address) external view returns(uint256); }}
+interface IERC20Dex {{
+    function approve(address,uint256) external returns(bool);
+    function balanceOf(address) external view returns(uint256);
+}}
 interface IUniRouterDex {{
-    struct ExactInputSingleParams {{ address tokenIn; address tokenOut; uint24 fee; address recipient; uint256 amountIn; uint256 amountOutMinimum; uint160 sqrtPriceLimitX96; }}
+    struct ExactInputSingleParams {{
+        address tokenIn; address tokenOut; uint24 fee; address recipient;
+        uint256 amountIn; uint256 amountOutMinimum; uint160 sqrtPriceLimitX96;
+    }}
     function exactInputSingle(ExactInputSingleParams calldata params) external payable returns(uint256 amountOut);
 }}
 interface IAeroRouterDex {{
-    struct ExactInputSingleParams {{ address tokenIn; address tokenOut; int24 tickSpacing; address recipient; uint256 deadline; uint256 amountIn; uint256 amountOutMinimum; uint160 sqrtPriceLimitX96; }}
+    struct ExactInputSingleParams {{
+        address tokenIn; address tokenOut; int24 tickSpacing; address recipient;
+        uint256 deadline; uint256 amountIn; uint256 amountOutMinimum; uint160 sqrtPriceLimitX96;
+    }}
     function exactInputSingle(ExactInputSingleParams calldata params) external payable returns(uint256 amountOut);
 }}
 
 contract GeneratedBaseDexArbTest is Test {{
     address constant USDC = {USDC};
-    address constant ASSET = {asset};
     address constant UNI_ROUTER = {UNI_ROUTER};
     address constant AERO_ROUTER = {AERO_ROUTER};
+    string constant RPC = "https://base-mainnet.g.alchemy.com/public";
 
-    function testBestPositiveQuoteOnLatestFork() external {{
-        vm.createSelectFork("https://base-mainnet.g.alchemy.com/public");
-        uint256 amountIn = {amount_in};
+    struct Candidate {{
+        address asset;
+        bool buyUni;
+        int24 buyTier;
+        bool sellUni;
+        int24 sellTier;
+        uint256 spotEdgeBpsE6;
+    }}
+
+    function candidates() internal pure returns (Candidate[] memory cs) {{
+        cs = new Candidate[]({len(edges)});
+        {' '.join(candidate_lines)}
+    }}
+
+    function sizes() internal pure returns (uint256[] memory xs) {{
+        uint256[{len(SIZES)}] memory fixedSizes = [{size_values}];
+        xs = new uint256[]({len(SIZES)});
+        for (uint256 i; i < fixedSizes.length; i++) xs[i] = fixedSizes[i];
+    }}
+
+    function testSearchPositiveSpotEdgesOnFreshFork() external {{
+        Candidate[] memory cs = candidates();
+        uint256[] memory xs = sizes();
+        uint256 positives;
+        emit log_named_uint("EDGE_COUNT", cs.length);
+        emit log_named_uint("SIZE_COUNT", xs.length);
+        for (uint256 i; i < cs.length; i++) {{
+            for (uint256 j; j < xs.length; j++) {{
+                if (_attempt(cs[i], i, xs[j])) positives++;
+            }}
+        }}
+        emit log_named_uint("FORK_PROFITABLE_COUNT", positives);
+    }}
+
+    function _attempt(Candidate memory c, uint256 idx, uint256 amountIn) internal returns (bool) {{
+        vm.createSelectFork(RPC);
         deal(USDC, address(this), amountIn);
         uint256 start = IERC20Dex(USDC).balanceOf(address(this));
-        {first}
-        {second}
-        uint256 finish = IERC20Dex(USDC).balanceOf(address(this));
-        emit log_named_string("ASSET", "{asset_sym}");
-        emit log_named_string("BUY_VENUE", "{buy_venue}");
-        emit log_named_uint("BUY_TIER", {buy_tier});
-        emit log_named_string("SELL_VENUE", "{sell_venue}");
-        emit log_named_uint("SELL_TIER", {sell_tier});
-        emit log_named_uint("START_USDC_RAW", start);
-        emit log_named_uint("ASSET_OUT_RAW", assetOut);
-        emit log_named_uint("FINAL_USDC_RAW", finalUsdc);
-        emit log_named_int("FORK_GROSS_PNL_USDC_RAW", int256(finish) - int256(start));
-        emit log_named_int("QUOTE_GROSS_PNL_USDC_RAW", {qgross_raw});
-        require(finish > start, "quote did not survive fork execution");
+
+        (bool ok1, uint256 assetOut) = _swap(c.buyUni, c.buyTier, USDC, c.asset, amountIn);
+        if (!ok1 || assetOut == 0) return false;
+        (bool ok2, uint256 finalUsdc) = _swap(c.sellUni, c.sellTier, c.asset, USDC, assetOut);
+        if (!ok2) return false;
+
+        int256 pnl = int256(finalUsdc) - int256(start);
+        if (pnl > 0) {{
+            emit log_named_uint("POSITIVE_ROUTE", 1);
+            emit log_named_uint("ROUTE_INDEX", idx);
+            emit log_named_address("ASSET", c.asset);
+            emit log_named_uint("AMOUNT_IN_USDC_RAW", amountIn);
+            emit log_named_uint("BUY_IS_UNI", c.buyUni ? 1 : 0);
+            emit log_named_int("BUY_TIER", int256(c.buyTier));
+            emit log_named_uint("SELL_IS_UNI", c.sellUni ? 1 : 0);
+            emit log_named_int("SELL_TIER", int256(c.sellTier));
+            emit log_named_uint("ASSET_OUT_RAW", assetOut);
+            emit log_named_uint("FINAL_USDC_RAW", finalUsdc);
+            emit log_named_int("FORK_GROSS_PNL_USDC_RAW", pnl);
+            emit log_named_uint("SPOT_EDGE_BPS_E6", c.spotEdgeBpsE6);
+            return true;
+        }}
+        return false;
+    }}
+
+    function _swap(bool isUni, int24 tier, address tokenIn, address tokenOut, uint256 amountIn)
+        internal returns (bool ok, uint256 amountOut)
+    {{
+        if (isUni) {{
+            IERC20Dex(tokenIn).approve(UNI_ROUTER, amountIn);
+            try IUniRouterDex(UNI_ROUTER).exactInputSingle(
+                IUniRouterDex.ExactInputSingleParams({{
+                    tokenIn: tokenIn, tokenOut: tokenOut, fee: uint24(uint256(int256(tier))),
+                    recipient: address(this), amountIn: amountIn, amountOutMinimum: 0,
+                    sqrtPriceLimitX96: 0
+                }})
+            ) returns (uint256 out) {{ return (true, out); }} catch {{ return (false, 0); }}
+        }}
+
+        IERC20Dex(tokenIn).approve(AERO_ROUTER, amountIn);
+        try IAeroRouterDex(AERO_ROUTER).exactInputSingle(
+            IAeroRouterDex.ExactInputSingleParams({{
+                tokenIn: tokenIn, tokenOut: tokenOut, tickSpacing: tier,
+                recipient: address(this), deadline: block.timestamp,
+                amountIn: amountIn, amountOutMinimum: 0, sqrtPriceLimitX96: 0
+            }})
+        ) returns (uint256 out) {{ return (true, out); }} catch {{ return (false, 0); }}
     }}
 }}
 '''
@@ -131,13 +208,13 @@ def main() -> int:
         return 2
     inp = pathlib.Path(sys.argv[1])
     out = pathlib.Path(sys.argv[2])
-    best = load_best(inp)
+    edges = load_edges(inp)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(render(best))
-    pathlib.Path("dex-candidate.json").write_text(json.dumps(best, indent=2) if best else "null\n")
-    print("GENERATOR_HAS_CANDIDATE=" + ("true" if best else "false"))
-    if best:
-        print("GENERATOR_BEST=" + json.dumps(best, separators=(",", ":")))
+    out.write_text(render(edges))
+    pathlib.Path("dex-candidate.json").write_text(json.dumps(edges, indent=2) + "\n")
+    print(f"GENERATOR_EDGE_COUNT={len(edges)}")
+    for edge in edges:
+        print("GENERATOR_EDGE=" + json.dumps(edge, separators=(",", ":")))
     return 0
 
 
