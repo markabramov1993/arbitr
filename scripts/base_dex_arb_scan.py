@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Live read-only Base DEX round-trip scanner.
 
-Compares Uniswap V3 QuoterV2 with current Aerodrome Slipstream Quoter across
+Compares Uniswap V3 QuoterV2 with the current Aerodrome Slipstream Quoter across
 common fee/tick-spacing tiers. It does not sign or submit transactions.
 """
 from __future__ import annotations
@@ -101,7 +101,6 @@ def route(start_sym, mid_sym, amount_human, buy_venue, sell_venue):
 
 def main():
     results = []
-    # Stablecoin-denominated round trips across useful liquid Base assets.
     for mid in ("WETH", "cbBTC", "cbXRP"):
         for amount in (100.0, 1000.0, 10000.0, 50000.0):
             for a, b in (("uni", "aero"), ("aero", "uni")):
