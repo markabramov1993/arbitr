@@ -56,7 +56,6 @@ jobs:
               data=json.loads(subprocess.check_output(['cast','rpc','eth_getTransactionReceipt',tx,'--rpc-url',RPC],text=True))
               receipt_cache[tx]=data;return data
           def eth_usdc_price(block):
-              # WETH collateral 18d, USDC loan 6d => Morpho oracle scale = 1e24.
               if block not in eth_price_cache:
                   eth_price_cache[block]=call_price(ETH_USDC_ORACLE,block)
               return eth_price_cache[block]
@@ -67,8 +66,9 @@ jobs:
               try:
                   block=int(x['blockNumber']); seized=int(d['seizedAssets']); repaid=int(d['repaidAssets']);
                   price=call_price(m['oracle']['address'],block)
-                  scale=D(10) ** D(36 + int(loan['decimals']) - int(coll['decimals']))
-                  collateral_value_units=(D(seized)*D(price))/scale
+                  # Morpho core always applies collateral * oraclePrice / 1e36.
+                  # The oracle itself already encodes the token-decimal conversion.
+                  collateral_value_units=(D(seized)*D(price))/D(10**36)
                   gross_units=collateral_value_units-D(repaid)
                   event={
                     'block':block,'tx':x['txHash'],'market':m['marketId'],'loan':loan['symbol'],'collateral':coll['symbol'],
@@ -81,7 +81,6 @@ jobs:
           ranked=[]
           for tx,g in txs.items():
               evs=g['events']; block=evs[0]['block']; loan=evs[0]['loan']
-              # Only combine economics when all liquidation events in the tx repay the same loan token.
               if not evs or any(e['loan']!=loan for e in evs): continue
               loan_dec=int(next(x['market']['loanAsset']['decimals'] for x in items if x['txHash']==tx))
               gross_raw=sum(D(e['gross_bonus_loan_raw']) for e in evs)
@@ -92,15 +91,14 @@ jobs:
                   l1_wei=int(r.get('l1Fee','0x0'),16) if isinstance(r.get('l1Fee','0x0'),str) else int(r.get('l1Fee',0) or 0)
                   total_fee_wei=execution_wei+l1_wei
                   ethp=eth_usdc_price(block)
-                  # wei ETH * Morpho WETH/USDC oracle price / 1e24 = USDC base units.
-                  gas_usdc_raw=D(total_fee_wei)*D(ethp)/D(10**24)
+                  # Morpho WETH/USDC oracle also uses the universal 1e36 scale.
+                  # gas wei * oraclePrice / 1e36 gives USDC base units.
+                  gas_usdc_raw=D(total_fee_wei)*D(ethp)/D(10**36)
               except Exception as e:
                   gas_used=egp=execution_wei=l1_wei=total_fee_wei=0;gas_usdc_raw=D(0); print(json.dumps({'RECEIPT_ERROR':str(e)[:200],'tx':tx}))
               gross_human=gross_raw/(D(10)**loan_dec)
               repaid_human=repaid_raw/(D(10)**loan_dec)
               gas_usdc=gas_usdc_raw/D(10**6)
-              # These recent samples are predominantly USDC-loan liquidations. If another loan token appears,
-              # do not pretend the gas conversion is denominated in that loan token.
               net_before_swap=(gross_human-gas_usdc) if loan=='USDC' else None
               row={
                 'tx':tx,'block':block,'events':len(evs),'loan':loan,'collaterals':sorted(set(e['collateral'] for e in evs)),
