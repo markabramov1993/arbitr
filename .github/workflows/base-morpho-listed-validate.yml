@@ -1,0 +1,90 @@
+name: Base Morpho Listed Candidate Validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - '.github/workflows/base-morpho-listed-validate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Find listed risky positions and cross-check Morpho storage/oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, urllib.request, subprocess, time, math
+          API='https://api.morpho.org/graphql'
+          RPC='https://base-mainnet.g.alchemy.com/public'
+          MORPHO='0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb'
+          def gql(q):
+              req=urllib.request.Request(API,data=json.dumps({'query':q}).encode(),headers={'content-type':'application/json','user-agent':'profit-engine-v07'})
+              with urllib.request.urlopen(req,timeout=30) as r:o=json.loads(r.read())
+              if o.get('errors'):raise RuntimeError(o['errors'])
+              return o['data']
+          q='''query { markets(first: 40, orderBy: SupplyAssetsUsd, orderDirection: Desc, where: { chainId_in: [8453], listed: true }) { items { marketId lltv listed loanAsset { address symbol decimals } collateralAsset { address symbol decimals } oracle { address } irmAddress state { supplyAssetsUsd borrowAssetsUsd liquidityAssetsUsd } } } }'''
+          markets=gql(q)['markets']['items']; risks=[];checked=0
+          for m in markets:
+              mid=m['marketId']
+              pq=f'''query {{ marketPositions(first: 50, orderBy: BorrowShares, orderDirection: Desc, where: {{ marketUniqueKey_in: ["{mid}"] }}) {{ items {{ user {{ address }} state {{ borrowShares borrowAssets borrowAssetsUsd collateral collateralUsd }} }} }} }}'''
+              try: ps=gql(pq)['marketPositions']['items']
+              except Exception as e: print('POSITION_QUERY_FAILED',mid,e);continue
+              checked+=len(ps);lltv=int(m['lltv'])/1e18
+              for p in ps:
+                  s=p['state']; debt=float(s.get('borrowAssetsUsd') or 0);coll=float(s.get('collateralUsd') or 0)
+                  if debt<=0 or coll<=0:continue
+                  hf=coll*lltv/debt
+                  if hf<1.05:
+                      risks.append({'hf_api':hf,'debt_usd':debt,'collateral_usd':coll,'borrowShares_api':str(s.get('borrowShares')),'collateral_api':str(s.get('collateral')),'user':p['user']['address'],'market':mid,'lltv_raw':m['lltv'],'loan':m['loanAsset'],'collateralAsset':m['collateralAsset'],'oracle':m['oracle']['address'],'irm':m['irmAddress']})
+              time.sleep(.025)
+          risks.sort(key=lambda x:x['hf_api'])
+          print('LISTED_MARKETS',len(markets),'POSITIONS_CHECKED',checked,'HF_LT_1_05',len(risks),'HF_LE_1',sum(x['hf_api']<=1 for x in risks))
+          for r in risks[:20]: print('API_RISK',json.dumps(r,separators=(',',':')))
+          if not risks:
+              print('NO_LISTED_RISK_CANDIDATE');raise SystemExit(0)
+          # Validate up to first 10 directly on-chain.
+          def cast(sig,*args):
+              cmd=['cast','call',MORPHO,sig,*args,'--rpc-url',RPC]
+              return subprocess.check_output(cmd,text=True,stderr=subprocess.STDOUT).strip()
+          def nums(txt):
+              out=[]
+              for ln in txt.splitlines():
+                  tok=ln.strip().split()[0] if ln.strip() else ''
+                  try:out.append(int(tok,0))
+                  except:pass
+              return out
+          validated=[]
+          for r in risks[:10]:
+              mid=r['market'];user=r['user']
+              try:
+                  params=cast('idToMarketParams(bytes32)(address,address,address,address,uint256)',mid).splitlines()
+                  loan=params[0].strip();coll=params[1].strip();oracle=params[2].strip();irm=params[3].strip();lltv=int(params[4].split()[0])
+                  pos=nums(cast('position(bytes32,address)(uint256,uint128,uint128)',mid,user));mkt=nums(cast('market(bytes32)(uint128,uint128,uint128,uint128,uint128,uint128)',mid))
+                  price=int(subprocess.check_output(['cast','call',oracle,'price()(uint256)','--rpc-url',RPC],text=True).strip().split()[0])
+                  supplyShares,borrowShares,collateral=pos; totalSupplyAssets,totalSupplyShares,totalBorrowAssets,totalBorrowShares,lastUpdate,fee=mkt
+                  # Conservative current borrow asset reconstruction from shares without pretending to accrue unobserved seconds.
+                  borrow_assets_ceil=(borrowShares*totalBorrowAssets + max(totalBorrowShares,1)-1)//max(totalBorrowShares,1)
+                  # Morpho oracle scale = 1e36 * 10^(loanDecimals-collateralDecimals). collateral*price/scale = loan-token units.
+                  loanDec=int(r['loan']['decimals']);collDec=int(r['collateralAsset']['decimals']);scale=10**(36+loanDec-collDec)
+                  collateral_loan_units=collateral*price/scale
+                  hf_storage=(collateral_loan_units*(lltv/1e18))/borrow_assets_ceil if borrow_assets_ceil else 999
+                  row={**r,'onchain':{'loan':loan,'collateralToken':coll,'oracle':oracle,'irm':irm,'lltv':lltv,'positionBorrowShares':borrowShares,'positionCollateral':collateral,'totalBorrowAssets':totalBorrowAssets,'totalBorrowShares':totalBorrowShares,'lastUpdate':lastUpdate,'oraclePrice':price,'borrowAssetsFromStoredShares':borrow_assets_ceil,'hf_stored_state_no_accrual':hf_storage}}
+                  validated.append(row);print('ONCHAIN',json.dumps(row,separators=(',',':')))
+              except Exception as e:print('ONCHAIN_FAILED',mid,user,str(e)[:300])
+          # Pick candidates that API says liquidatable and stored-state cross-check does not contradict materially.
+          good=[x for x in validated if x['hf_api']<=1 and x['onchain']['hf_stored_state_no_accrual']<=1.01]
+          good.sort(key=lambda x:x['debt_usd'],reverse=True)
+          print('VALIDATED_LIQUIDATABLE_SCREEN',len(good))
+          print('BEST_VALIDATED='+json.dumps(good[0] if good else None,separators=(',',':')))
+          print('NOTE=Stored-state HF is only a cross-check; exact liquidation eligibility must be determined after interest accrual inside liquidate() on a stateful fork.')
+          PY
