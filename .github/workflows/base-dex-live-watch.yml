@@ -1,0 +1,98 @@
+name: Base DEX Live Watch
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/base_dex_live_scan.py'
+      - 'scripts/generate_base_dex_fork_test.py'
+      - '.github/workflows/base-dex-live-watch.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: base-dex-live-watch
+  cancel-in-progress: true
+
+jobs:
+  scan-and-fork:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Read-only staged DEX scan
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 scripts/base_dex_live_scan.py 2>&1 | tee base-dex-live-scan.jsonl
+          echo '=== SCAN SUMMARY ==='
+          grep '"kind":"summary"' base-dex-live-scan.jsonl | tail -1 || true
+
+      - name: Generate exact local-fork route test
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf dexwatch
+          forge init dexwatch --force --empty >/dev/null
+          python3 scripts/generate_base_dex_fork_test.py base-dex-live-scan.jsonl dexwatch/test/GeneratedBaseDexArb.t.sol | tee dex-generator.log
+          echo '=== CANDIDATE ==='
+          cat dex-candidate.json
+
+      - name: Execute best positive quote on fresh Base fork
+        shell: bash
+        run: |
+          set +e
+          set -o pipefail
+          cd dexwatch
+          forge test --match-contract GeneratedBaseDexArbTest -vv 2>&1 | tee ../base-dex-fork-validation.log
+          RC=${PIPESTATUS[0]}
+          cd ..
+          echo "$RC" > base-dex-fork-exit.txt
+          echo "FORK_TEST_EXIT=$RC"
+          exit 0
+
+      - name: Summarize executable signal
+        shell: bash
+        run: |
+          echo '=== EXECUTION SIGNAL ==='
+          HAS=$(python3 - <<'PY'
+          import json
+          try:
+              x=json.load(open('dex-candidate.json'))
+          except Exception:
+              x=None
+          print('true' if x else 'false')
+          PY
+          )
+          RC=$(cat base-dex-fork-exit.txt 2>/dev/null || echo 99)
+          grep -E 'FORK_GROSS_PNL_USDC_RAW|QUOTE_GROSS_PNL_USDC_RAW|ASSET|BUY_VENUE|SELL_VENUE' base-dex-fork-validation.log || true
+          if [ "$HAS" = 'true' ] && [ "$RC" = '0' ] && grep -q 'testBestPositiveQuoteOnLatestFork()' base-dex-fork-validation.log && grep -q '\[PASS\]' base-dex-fork-validation.log; then
+            echo 'DEX_FORK_SURVIVED=true'
+          else
+            echo 'DEX_FORK_SURVIVED=false'
+          fi
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: base-dex-live-watch-evidence
+          path: |
+            base-dex-live-scan.jsonl
+            dex-generator.log
+            dex-candidate.json
+            base-dex-fork-validation.log
+            base-dex-fork-exit.txt
+            dexwatch/test/GeneratedBaseDexArb.t.sol
+          retention-days: 7
