@@ -1,0 +1,53 @@
+name: RTC Wallet Live Check
+
+on:
+  push:
+    paths:
+      - '.github/workflows/rtc-wallet-live-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read RustChain wallet balance and history
+        shell: bash
+        run: |
+          set -euo pipefail
+          WALLET='RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d'
+
+          echo '=== BALANCE ==='
+          balance_code=$(curl -sk --max-time 20 -o /tmp/balance.json -w '%{http_code}' \
+            "https://rustchain.org/wallet/balance?miner_id=${WALLET}" || true)
+          echo "BALANCE_HTTP=${balance_code}"
+          if [ -s /tmp/balance.json ]; then cat /tmp/balance.json; echo; fi
+
+          echo '=== HISTORY ==='
+          history_code=$(curl -sk --max-time 20 -o /tmp/history.json -w '%{http_code}' \
+            "https://rustchain.org/wallet/history?miner_id=${WALLET}" || true)
+          echo "HISTORY_HTTP=${history_code}"
+          if [ -s /tmp/history.json ]; then
+            python - <<'PY'
+          import json
+          from pathlib import Path
+
+          p = Path('/tmp/history.json')
+          try:
+              data = json.loads(p.read_text())
+          except Exception:
+              print(p.read_text()[:20000])
+              raise SystemExit(0)
+
+          rows = data.get('history', data.get('transactions', data.get('items', data if isinstance(data, list) else [])))
+          if isinstance(rows, list):
+              print(f'HISTORY_COUNT={len(rows)}')
+              for row in rows[-50:]:
+                  print('TX=' + json.dumps(row, ensure_ascii=False, sort_keys=True))
+          else:
+              print(json.dumps(data, ensure_ascii=False, sort_keys=True)[:20000])
+          PY
+          fi
