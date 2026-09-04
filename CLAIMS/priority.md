@@ -1,0 +1,1 @@
+Priority order: 1) live fork-validated Profit Engine signals; 2) no-KYC short-resolution Immunefi programs; 3) proven Algora paid PR programs; 4) RustChain GitHub/email bounties. Avoid stale or unfunded bounty listings.
