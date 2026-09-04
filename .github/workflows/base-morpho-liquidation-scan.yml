@@ -1,0 +1,59 @@
+name: Base Morpho Liquidation Discovery
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - '.github/workflows/base-morpho-liquidation-scan.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Query Morpho API and rank risky Base positions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, urllib.request, time, math
+          URL='https://api.morpho.org/graphql'
+          def gql(q):
+              req=urllib.request.Request(URL,data=json.dumps({'query':q}).encode(),headers={'content-type':'application/json','user-agent':'profit-engine-v07'})
+              with urllib.request.urlopen(req,timeout=30) as r: out=json.loads(r.read())
+              if out.get('errors'): raise RuntimeError(out['errors'])
+              return out['data']
+          q='''query { markets(first: 30, orderBy: SupplyAssetsUsd, orderDirection: Desc, where: { chainId_in: [8453] }) { items { marketId lltv listed loanAsset { address symbol decimals } collateralAsset { address symbol decimals } state { supplyAssetsUsd borrowAssetsUsd liquidityAssetsUsd } } } }'''
+          markets=gql(q)['markets']['items']
+          print('BASE_MARKETS',len(markets))
+          candidates=[]; checked=0
+          for m in markets:
+              if not m.get('collateralAsset') or not m.get('loanAsset'): continue
+              mid=m['marketId']; lltv=int(m['lltv'])/1e18
+              pq=f'''query {{ marketPositions(first: 50, orderBy: BorrowShares, orderDirection: Desc, where: {{ marketUniqueKey_in: ["{mid}"] }}) {{ items {{ user {{ address }} state {{ borrowAssets borrowAssetsUsd collateral collateralUsd }} }} }} }}'''
+              try: items=gql(pq)['marketPositions']['items']
+              except Exception as e:
+                  print('POSITION_QUERY_FAILED',mid,str(e));continue
+              checked += len(items)
+              for p in items:
+                  s=p.get('state') or {}; debt=s.get('borrowAssetsUsd'); coll=s.get('collateralUsd')
+                  try: debt=float(debt or 0); coll=float(coll or 0)
+                  except: continue
+                  if debt<=0 or coll<=0: continue
+                  hf=(coll*lltv)/debt
+                  row={'health_factor':hf,'debt_usd':debt,'collateral_usd':coll,'user':p['user']['address'],'market_id':mid,'loan':m['loanAsset']['symbol'],'collateral':m['collateralAsset']['symbol'],'lltv':lltv,'listed':m.get('listed')}
+                  if hf<1.10: candidates.append(row)
+              time.sleep(0.03)
+          candidates.sort(key=lambda x:x['health_factor'])
+          print('POSITIONS_CHECKED',checked,'HF_LT_1_10',len(candidates))
+          liquid=[x for x in candidates if x['health_factor']<=1]
+          near=[x for x in candidates if 1<x['health_factor']<1.03]
+          print('API_LIQUIDATABLE_CANDIDATES',len(liquid),'NEAR_HF_1_03',len(near))
+          for x in candidates[:30]: print('RISK',json.dumps(x,separators=(',',':')))
+          print('BEST_LIQUIDATION_CANDIDATE='+json.dumps(liquid[0] if liquid else None,separators=(',',':')))
+          print('NOTE=API discovery only; any HF<=1 candidate must be re-read from Morpho contract/oracle at a fixed block before liquidation simulation.')
+          PY
