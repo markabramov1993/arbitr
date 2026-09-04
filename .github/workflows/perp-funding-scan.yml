@@ -1,0 +1,29 @@
+name: Perp Funding Scan
+
+on:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - 'scripts/perp_funding_scan.py'
+      - '.github/workflows/perp-funding-scan.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan current perpetual funding
+        shell: bash
+        run: python3 scripts/perp_funding_scan.py | tee perp-funding.jsonl
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perp-funding-evidence
+          path: perp-funding.jsonl
+          retention-days: 30
