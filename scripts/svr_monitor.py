@@ -3,6 +3,8 @@
 
 No private key, no SolverOperation, no bid submission. It only subscribes to the
 public solver userOperations JSON-RPC subscription and records raw notifications.
+This file intentionally remains read-only; the extra note also triggers CI after
+the workflow exists on the branch.
 """
 import argparse
 import asyncio
