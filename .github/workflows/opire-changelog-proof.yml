@@ -1,0 +1,36 @@
+name: Opire Changelog Proof
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'earn/opire-changelog/**'
+      - '.github/workflows/opire-changelog-proof.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Unit tests
+        working-directory: earn/opire-changelog
+        run: python3 -m unittest -v test_changelog.py
+      - name: Generate changelog from this real GitHub repo
+        working-directory: earn/opire-changelog
+        run: python3 changelog.py --repo ../.. --output generated-from-real-repo.md --title CI-Proof
+      - name: Show generated sample
+        working-directory: earn/opire-changelog
+        run: sed -n '1,120p' generated-from-real-repo.md
+      - name: Upload proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: opire-changelog-proof
+          path: earn/opire-changelog/generated-from-real-repo.md
+          retention-days: 30
