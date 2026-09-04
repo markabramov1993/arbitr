@@ -1,0 +1,41 @@
+name: Verify Mova 60
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'earn/mova-store-60/**'
+      - '.github/workflows/verify-mova-60.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Clone current upstream
+        run: git clone --depth 1 https://github.com/Movalabs-crew/mova-store.git target
+      - name: Apply README fix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('target/README.md')
+          s=p.read_text()
+          anchor='| `PUBLIC_MERCHANT_ADDRESS`             | no       | Display-only merchant wallet (on-chain value is authoritative) |'
+          rows='''| `NEXT_PUBLIC_EMAILJS_SERVICE_ID`      | yes      | EmailJS service ID for OTP and notifications |\n| `NEXT_PUBLIC_EMAILJS_TEMPLATE_ID`     | yes      | EmailJS template ID for OTP and notifications |\n| `NEXT_PUBLIC_EMAILJS_PUBLIC_KEY`      | yes      | EmailJS public key used by the browser client |\n| `NEXT_PUBLIC_DEFAULT_RECIPIENT_EMAIL` | no       | Default recipient for contact-form email |'''
+          if anchor not in s: raise SystemExit('README anchor not found')
+          p.write_text(s.replace(anchor, anchor+'\n'+rows, 1))
+          PY
+      - name: Assert four EmailJS rows
+        working-directory: target
+        run: test "$(grep -c 'EMAILJS' README.md)" -eq 4
+      - name: Install dependencies
+        working-directory: target
+        run: npm ci
+      - name: Format check
+        working-directory: target
+        run: npm run format:check
