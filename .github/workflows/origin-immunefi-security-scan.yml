@@ -35,12 +35,19 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Install Origin-pinned Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.8.1
+
       - name: Install Slither and pnpm
         run: |
           python -m pip install --upgrade pip
           python -m pip install slither-analyzer
           corepack enable
           corepack prepare pnpm@10.18.3 --activate
+          forge --version
+          slither --version
 
       - name: Configure GitHub dependencies over HTTPS
         run: |
