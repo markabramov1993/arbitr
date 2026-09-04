@@ -1,0 +1,31 @@
+name: Identify Observed SVR Feeds
+
+on:
+  push:
+    paths:
+      - '.github/workflows/svr-feed-identify.yml'
+  workflow_dispatch:
+
+jobs:
+  identify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Read feed metadata from Base
+        shell: bash
+        run: |
+          set -euo pipefail
+          RPC='https://base-mainnet.g.alchemy.com/public'
+          for A in \
+            0xe5ec87a39445b8d5b751b116802a53c5ae7e9df1 \
+            0x4b6f092e0e13b94ffaf2c59aabdeb85a5342e9c1 \
+            0xeb3ad4395924b76eb64b3d6ababa0b62875b1a1f \
+            0x137233996b6586a110bb7a753248e26cc0307b1b; do
+            echo "FEED $A"
+            echo -n 'description='; cast call "$A" 'description()(string)' --rpc-url "$RPC" || true
+            echo -n 'decimals='; cast call "$A" 'decimals()(uint8)' --rpc-url "$RPC" || true
+            echo -n 'latestAnswer='; cast call "$A" 'latestAnswer()(int256)' --rpc-url "$RPC" || true
+            echo -n 'typeAndVersion='; cast call "$A" 'typeAndVersion()(string)' --rpc-url "$RPC" || true
+          done
