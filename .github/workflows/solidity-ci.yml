@@ -1,4 +1,4 @@
-name: Solidity CI
+name: Profit Engine Free CI
 
 on:
   push:
@@ -17,5 +17,28 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           version: stable
-      - name: Build
+      - name: Build Solidity harness
         run: forge build
+
+  free-base-rpc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check public Base RPC endpoints with failover
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload='{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}'
+          block_payload='{"jsonrpc":"2.0","id":2,"method":"eth_blockNumber","params":[]}'
+          ok=0
+          for url in https://mainnet.base.org https://base-mainnet.g.alchemy.com/public; do
+            echo "Checking $url"
+            response=$(curl --fail --silent --show-error --max-time 15 -H 'content-type: application/json' --data "$payload" "$url" || true)
+            if echo "$response" | grep -qi '"result"[[:space:]]*:[[:space:]]*"0x2105"'; then
+              block=$(curl --fail --silent --show-error --max-time 15 -H 'content-type: application/json' --data "$block_payload" "$url" || true)
+              echo "Base RPC healthy: $url; block response: $block"
+              ok=1
+              break
+            fi
+            echo "RPC unavailable/rate-limited or wrong chain: $response"
+          done
+          test "$ok" -eq 1
