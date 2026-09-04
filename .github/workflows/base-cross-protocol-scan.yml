@@ -1,0 +1,132 @@
+name: Base Cross Protocol Arbitrage Scan
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - '.github/workflows/base-cross-protocol-scan.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Cross quote Uniswap V2/V3 Pancake Sushi and Aerodrome Slipstream
+        shell: bash
+        run: |
+          set -euo pipefail
+          export UNI_SINGLE_SEL=$(cast sig 'quoteExactInputSingle((address,address,uint256,uint24,uint160))')
+          export SLIP_SINGLE_SEL=$(cast sig 'quoteExactInputSingle((address,address,uint256,int24,uint160))')
+          export FLASH_SEL=$(cast sig 'FLASHLOAN_PREMIUM_TOTAL()')
+          python3 - <<'PY'
+          import os,json,urllib.request,math
+          URLS=['https://base-mainnet.g.alchemy.com/public','https://mainnet.base.org']
+          WETH='4200000000000000000000000000000000000006'; USDC='833589fcd6edb6e08f4c7c32d4f71b54bda02913'
+          UNI_QUOTER='0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a'; SLIP_QUOTER='0x254cF9E1E6e233aa1AC962CB9B05b2cfeAaE15b0'; AAVE='0xA238Dd80C259a72e81d7e4664a9801593F98d1c5'
+          V2=[('uniswap_v2','0x88A43bbDF9D098eEC7bCEda4e2494615dfD9bB9C',30),('pancake_v2','0x79474223AEdD0339780baCcE75aBDa0BE84dcBF9',25),('sushi_v2','0x2F8818D1B0f3e3E295440c1C0cDDf40aAA21fA87',30)]
+          UNI_FEES=[100,500,3000,10000]; SLIP_SP=[1,10,50,100,200,2000]
+          AMOUNTS=[5,25,100,500,2500,10000,25000]
+          zero='0x0000000000000000000000000000000000000000'
+          def u(x): return x.to_bytes(32,'big').hex()
+          def a(x): return '0'*24+x.lower().replace('0x','')
+          def signed(x): return (x & ((1<<256)-1)).to_bytes(32,'big').hex()
+          def single(sel,tin,tout,amt,param): return sel+a('0x'+tin)+a('0x'+tout)+u(amt)+(u(param) if param>=0 else signed(param))+u(0)
+          def post(url,payload):
+              req=urllib.request.Request(url,data=json.dumps(payload).encode(),headers={'content-type':'application/json','user-agent':'profit-engine-cross-v07'})
+              with urllib.request.urlopen(req,timeout=30) as r:return json.loads(r.read())
+          def rpc(reqs):
+              last=None
+              for url in URLS:
+                  try:
+                      out=[]
+                      for i in range(0,len(reqs),35):
+                          z=post(url,reqs[i:i+35]);
+                          if not isinstance(z,list): raise RuntimeError(z)
+                          out+=z
+                      print('RPC='+url);return {x['id']:x for x in out}
+                  except Exception as e:last=e;print('RPC failed',url,e)
+              raise RuntimeError(last)
+          def words(raw):
+              h=raw[2:];return [int(h[i:i+64],16) for i in range(0,len(h),64)]
+          # Base state + V2 reserves
+          init=[{'jsonrpc':'2.0','id':'block','method':'eth_blockNumber','params':[]},{'jsonrpc':'2.0','id':'gas','method':'eth_gasPrice','params':[]},{'jsonrpc':'2.0','id':'flash','method':'eth_call','params':[{'to':AAVE,'data':os.environ['FLASH_SEL']},'latest']}]
+          for n,p,f in V2:
+              init += [{'jsonrpc':'2.0','id':n+':t0','method':'eth_call','params':[{'to':p,'data':'0x0dfe1681'},'latest']},{'jsonrpc':'2.0','id':n+':res','method':'eth_call','params':[{'to':p,'data':'0x0902f1ac'},'latest']}]
+          B=rpc(init); block=int(B['block']['result'],16); gas_price=int(B['gas']['result'],16); flash_bps=int(B['flash']['result'],16)
+          v2={}
+          for n,p,f in V2:
+              t0='0x'+B[n+':t0']['result'][-40:].lower(); r=words(B[n+':res']['result']);r0,r1=r[0],r[1]
+              rw=r0 if t0=='0x'+WETH else r1;ru=r0 if t0=='0x'+USDC else r1
+              v2[n]=(rw,ru,f)
+          eth_price=(v2['uniswap_v2'][1]/1e6)/(v2['uniswap_v2'][0]/1e18)
+          print(f'BLOCK={block} GAS={gas_price} FLASH_BPS={flash_bps} ETH_REF={eth_price:.4f}')
+          def v2swap(x,rin,rout,fee):
+              y=x*(10000-fee);return y*rout//(rin*10000+y)
+          # stage 1: exact USDC->WETH for all concentrated venues; V2 locally
+          req=[];meta={}
+          for usd in AMOUNTS:
+              amt=int(usd*1e6)
+              for fee in UNI_FEES:
+                  rid=f'in:u:{fee}:{usd}';meta[rid]=('uni',fee,usd)
+                  req.append({'jsonrpc':'2.0','id':rid,'method':'eth_call','params':[{'to':UNI_QUOTER,'data':single(os.environ['UNI_SINGLE_SEL'],USDC,WETH,amt,fee)},'latest']})
+              for sp in SLIP_SP:
+                  rid=f'in:s:{sp}:{usd}';meta[rid]=('slip',sp,usd)
+                  req.append({'jsonrpc':'2.0','id':rid,'method':'eth_call','params':[{'to':SLIP_QUOTER,'data':single(os.environ['SLIP_SINGLE_SEL'],USDC,WETH,amt,sp)},'latest']})
+          Q=rpc(req); entries={usd:[] for usd in AMOUNTS}
+          for usd in AMOUNTS:
+              amt=int(usd*1e6)
+              for n,(rw,ru,fee) in v2.items():entries[usd].append({'name':n,'weth':v2swap(amt,ru,rw,fee),'gas':80000})
+          for rid,(typ,p,usd) in meta.items():
+              x=Q.get(rid)
+              if not x or 'error' in x:continue
+              w=words(x['result']);
+              if len(w)>=4 and w[0]>0:entries[usd].append({'name':f'{typ}_{p}','weth':w[0],'gas':w[3]})
+          # retain 3 best buy venues per input size
+          tops={usd:sorted(rows,key=lambda z:z['weth'],reverse=True)[:3] for usd,rows in entries.items()}
+          for usd in AMOUNTS:print('TOP_BUY',usd,[(x['name'],x['weth']/1e18) for x in tops[usd]])
+          # stage 2: for each retained WETH amount quote every concentrated exit; V2 exits local
+          req=[];meta2={}
+          for usd,rows in tops.items():
+              for j,e in enumerate(rows):
+                  amt=e['weth']
+                  for fee in UNI_FEES:
+                      rid=f'out:{usd}:{j}:u:{fee}';meta2[rid]=(usd,j,f'uni_{fee}')
+                      req.append({'jsonrpc':'2.0','id':rid,'method':'eth_call','params':[{'to':UNI_QUOTER,'data':single(os.environ['UNI_SINGLE_SEL'],WETH,USDC,amt,fee)},'latest']})
+                  for sp in SLIP_SP:
+                      rid=f'out:{usd}:{j}:s:{sp}';meta2[rid]=(usd,j,f'slip_{sp}')
+                      req.append({'jsonrpc':'2.0','id':rid,'method':'eth_call','params':[{'to':SLIP_QUOTER,'data':single(os.environ['SLIP_SINGLE_SEL'],WETH,USDC,amt,sp)},'latest']})
+          O=rpc(req); exits={(usd,j):[] for usd in AMOUNTS for j in range(len(tops[usd]))}
+          for usd,rows in tops.items():
+              for j,e in enumerate(rows):
+                  for n,(rw,ru,fee) in v2.items():exits[(usd,j)].append({'name':n,'usdc':v2swap(e['weth'],rw,ru,fee),'gas':80000})
+          for rid,(usd,j,name) in meta2.items():
+              x=O.get(rid)
+              if not x or 'error' in x:continue
+              w=words(x['result']);
+              if len(w)>=4 and w[0]>0:exits[(usd,j)].append({'name':name,'usdc':w[0],'gas':w[3]})
+          best=None; allpos=[]
+          for usd,rows in tops.items():
+              for j,e in enumerate(rows):
+                  for x in exits[(usd,j)]:
+                      if x['name']==e['name']:continue
+                      out=x['usdc']/1e6;gross=out-usd;flash=usd*flash_bps/10000
+                      # Quoter gas estimates + V2 proxy estimates, 180k flash/settlement overhead and conservative L1 data reserve.
+                      gas_usd=(e['gas']+x['gas']+180000)*gas_price/1e18*eth_price+0.10
+                      net=gross-flash-gas_usd
+                      row={'route':f"USDC->{e['name']}:WETH->{x['name']}:USDC",'input_usdc':usd,'output_usdc':out,'gross_usd':gross,'flash_fee_usd':flash,'gas_plus_l1_reserve_usd':gas_usd,'estimated_net_usd':net,'block':block,'entry_weth':e['weth']/1e18}
+                      if net>0:allpos.append(row)
+                      if best is None or net>best['estimated_net_usd']:best=row
+          print('\n=== BEST CROSS-PROTOCOL CYCLE ===')
+          if best:
+              best['note']='distinct-pool same-block quote screen; no realized P&L; stateful fork required before execution'
+              print(json.dumps(best,indent=2));print('CANDIDATE_NET_POSITIVE='+('yes' if best['estimated_net_usd']>0 else 'no'))
+          print('POSITIVE_CANDIDATES',len(allpos))
+          for r in sorted(allpos,key=lambda z:z['estimated_net_usd'],reverse=True)[:10]:print('POS',json.dumps(r))
+          PY
