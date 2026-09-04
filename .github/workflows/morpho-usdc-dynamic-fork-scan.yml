@@ -1,0 +1,159 @@
+name: Morpho USDC Dynamic Fork Scan
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - '.github/workflows/morpho-usdc-dynamic-fork-scan.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Install forge-std for fork-only ERC20 funding
+        shell: bash
+        run: |
+          set -euxo pipefail
+          forge install foundry-rs/forge-std --no-git
+      - name: Generate current listed Base USDC candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, urllib.request
+          API='https://api.morpho.org/graphql'
+          USDC='0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+          def gql(q):
+              req=urllib.request.Request(API,data=json.dumps({'query':q}).encode(),headers={'content-type':'application/json','user-agent':'profit-engine-v07-usdc-fork'})
+              with urllib.request.urlopen(req,timeout=30) as r: out=json.loads(r.read())
+              if out.get('errors'): raise RuntimeError(out['errors'])
+              return out['data']
+          q='''query { markets(first: 100, orderBy: SupplyAssetsUsd, orderDirection: Desc, where: { chainId_in: [8453], listed: true }) { items { marketId lltv listed loanAsset { address symbol decimals } collateralAsset { address symbol decimals } oracle { address } irmAddress } } }'''
+          markets=[m for m in gql(q)['markets']['items'] if m['loanAsset']['address'].lower()==USDC.lower()]
+          candidates=[]
+          for m in markets:
+              mid=m['marketId']
+              pq=f'''query {{ marketPositions(first: 100, orderBy: BorrowShares, orderDirection: Desc, where: {{ marketUniqueKey_in: ["{mid}"] }}) {{ items {{ user {{ address }} state {{ borrowShares borrowAssetsUsd collateral collateralUsd }} }} }} }}'''
+              try: positions=gql(pq)['marketPositions']['items']
+              except Exception as e:
+                  print('position query failed',mid,e); continue
+              lltv=int(m['lltv'])/1e18
+              for p in positions:
+                  s=p['state']; debt=float(s.get('borrowAssetsUsd') or 0); collusd=float(s.get('collateralUsd') or 0)
+                  if debt<=0 or collusd<=0: continue
+                  hf=collusd*lltv/debt
+                  if hf <= 1.02:
+                      candidates.append({
+                          'hf':hf,'debt':debt,'collusd':collusd,'user':p['user']['address'].lower(),
+                          'mid':mid.lower(),'loan':m['loanAsset']['address'].lower(),
+                          'coll':m['collateralAsset']['address'].lower(),'collDec':int(m['collateralAsset']['decimals']),
+                          'collSymbol':m['collateralAsset']['symbol'],'oracle':m['oracle']['address'].lower(),
+                          'irm':m['irmAddress'].lower(),'lltv':int(m['lltv'])
+                      })
+          candidates.sort(key=lambda x:(x['hf'],-x['debt']))
+          candidates=candidates[:120]
+          print('GENERATED_USDC_CANDIDATES',len(candidates))
+          for c in candidates[:25]: print('CANDIDATE',json.dumps(c,separators=(',',':')))
+          def addr(x): return f'address(uint160({int(x,16)}))'
+          lines=[]
+          for i,c in enumerate(candidates):
+              hf=int(max(c['hf'],0)*1e18)
+              lines.append(f'''        cs[{i}] = Candidate(bytes32({c['mid']}), {addr(c['user'])}, {addr(c['loan'])}, {addr(c['coll'])}, {addr(c['oracle'])}, {addr(c['irm'])}, {c['lltv']}, {c['collDec']}, {hf}, {int(c['debt']*1e6)});''')
+          source=f'''// SPDX-License-Identifier: MIT
+          pragma solidity ^0.8.24;
+          import "forge-std/Test.sol";
+          struct MarketParams {{ address loanToken; address collateralToken; address oracle; address irm; uint256 lltv; }}
+          interface IMorpho {{
+            function position(bytes32,address) external view returns(uint256,uint128,uint128);
+            function liquidate(MarketParams memory,address,uint256,uint256,bytes calldata) external returns(uint256,uint256);
+          }}
+          interface IERC20 {{ function approve(address,uint256) external returns(bool); function balanceOf(address) external view returns(uint256); }}
+          interface IOracle {{ function price() external view returns(uint256); }}
+          contract GeneratedMorphoUSDCCandidatesTest is Test {{
+            address constant MORPHO=address(uint160(1071767867375834718561649552532670117991385333707));
+            address constant USDC=address(uint160(749071750893463290574776461331093852760741783827));
+            event log_named_uint(string key,uint256 val);
+            event log_named_address(string key,address val);
+            event log_named_string(string key,string val);
+            struct Candidate {{ bytes32 id; address user; address loan; address coll; address oracle; address irm; uint256 lltv; uint8 collDec; uint256 apiHfE18; uint256 apiDebtUsdE6; }}
+            function candidates() internal pure returns(Candidate[] memory cs) {{
+              cs=new Candidate[]({len(candidates)});
+          {chr(10).join(lines)}
+            }}
+            function testScanCurrentUSDCCandidates() external {{
+              vm.createSelectFork("https://base-mainnet.g.alchemy.com/public");
+              deal(USDC,address(this),100_000_000e6);
+              require(IERC20(USDC).approve(MORPHO,type(uint256).max),"approve");
+              Candidate[] memory cs=candidates();
+              uint256 successes;
+              emit log_named_uint("candidateCount",cs.length);
+              for(uint256 i;i<cs.length;i++) {{ if(_try(cs[i],i)) successes++; }}
+              emit log_named_uint("REAL_FORK_LIQUIDATABLE_COUNT",successes);
+            }}
+            function _try(Candidate memory c,uint256 idx) internal returns(bool) {{
+              (,uint128 shares,uint128 collateral)=IMorpho(MORPHO).position(c.id,c.user);
+              if(shares==0 || collateral==0) return false;
+              MarketParams memory p=MarketParams(c.loan,c.coll,c.oracle,c.irm,c.lltv);
+              uint256 lb=IERC20(USDC).balanceOf(address(this));
+              uint256 cb=IERC20(c.coll).balanceOf(address(this));
+              try IMorpho(MORPHO).liquidate(p,c.user,0,uint256(shares),"") returns(uint256 seized,uint256 repaid) {{
+                _record(c,idx,"FULL_DEBT",lb,cb,seized,repaid); return true;
+              }} catch Error(string memory reason) {{
+                if(keccak256(bytes(reason))==keccak256(bytes("position is healthy"))) return false;
+                try IMorpho(MORPHO).liquidate(p,c.user,uint256(collateral),0,"") returns(uint256 seized2,uint256 repaid2) {{
+                  _record(c,idx,"ALL_COLLATERAL",lb,cb,seized2,repaid2); return true;
+                }} catch {{ return false; }}
+              }} catch {{
+                try IMorpho(MORPHO).liquidate(p,c.user,uint256(collateral),0,"") returns(uint256 seized3,uint256 repaid3) {{
+                  _record(c,idx,"ALL_COLLATERAL",lb,cb,seized3,repaid3); return true;
+                }} catch {{ return false; }}
+              }}
+            }}
+            function _record(Candidate memory c,uint256 idx,string memory mode,uint256 lb,uint256 cb,uint256 seized,uint256 repaid) internal {{
+              uint256 spent=lb-IERC20(USDC).balanceOf(address(this));
+              uint256 got=IERC20(c.coll).balanceOf(address(this))-cb;
+              uint256 price=IOracle(c.oracle).price();
+              uint256 scale=10**uint256(42-c.collDec); // 1e36 * 10^(6-collateralDecimals), loan USDC=6d.
+              uint256 value=got*price/scale;
+              uint256 bonus=value>spent?value-spent:0;
+              emit log_named_uint("SUCCESS_INDEX",idx);
+              emit log_named_string("SUCCESS_MODE",mode);
+              emit log_named_address("SUCCESS_BORROWER",c.user);
+              emit log_named_address("SUCCESS_COLLATERAL",c.coll);
+              emit log_named_uint("API_HF_E18",c.apiHfE18);
+              emit log_named_uint("API_DEBT_USD_E6",c.apiDebtUsdE6);
+              emit log_named_uint("SEIZED",seized);
+              emit log_named_uint("REPAID_USDC",repaid);
+              emit log_named_uint("SPENT_USDC",spent);
+              emit log_named_uint("ORACLE_VALUE_USDC",value);
+              emit log_named_uint("GROSS_BONUS_USDC",bonus);
+            }}
+          }}
+          '''
+          open('test/GeneratedMorphoUSDCCandidates.t.sol','w').write(source)
+          PY
+      - name: Run generated USDC candidates against latest Base state
+        shell: bash
+        run: |
+          set -o pipefail
+          forge test --match-contract GeneratedMorphoUSDCCandidatesTest -vv 2>&1 | tee morpho-usdc-dynamic-fork.log
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: morpho-usdc-dynamic-fork-evidence
+          path: |
+            morpho-usdc-dynamic-fork.log
+            test/GeneratedMorphoUSDCCandidates.t.sol
+          retention-days: 30
