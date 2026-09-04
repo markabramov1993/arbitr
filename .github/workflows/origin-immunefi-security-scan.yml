@@ -44,8 +44,11 @@ jobs:
 
       - name: Configure GitHub dependencies over HTTPS
         run: |
-          git config --global url."https://github.com/".insteadOf "git@github.com:"
-          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global --unset-all url."https://github.com/".insteadOf || true
+          git config --global --add url."https://github.com/".insteadOf "git@github.com:"
+          git config --global --add url."https://github.com/".insteadOf "ssh://git@github.com/"
+          echo 'Configured GitHub URL rewrites:'
+          git config --global --get-all url."https://github.com/".insteadOf
 
       - name: Install Origin dependencies
         working-directory: origin-dollar/contracts
@@ -60,14 +63,20 @@ jobs:
           pnpm run slither 2>&1 | tee ../../origin-slither.log
 
       - name: Summarize evidence
+        if: always()
         run: |
-          echo "UPSTREAM_SHA=$(cat origin-upstream-sha.txt)"
+          echo "UPSTREAM_SHA=$(cat origin-upstream-sha.txt 2>/dev/null || echo unknown)"
           echo "SLITHER_OUTCOME=${{ steps.slither.outcome }}"
           echo '--- detector summary ---'
-          grep -Ei '(^| )(high|medium|reentr|arbitrary|delegatecall|uninitialized|dangerous|incorrect|shadow|controlled|suicid|selfdestruct|price|oracle)' origin-slither.log | tail -n 160 || true
+          if [ -f origin-slither.log ]; then
+            grep -Ei '(^| )(high|medium|reentr|arbitrary|delegatecall|uninitialized|dangerous|incorrect|shadow|controlled|suicid|selfdestruct|price|oracle)' origin-slither.log | tail -n 160 || true
+          else
+            echo 'No Slither log produced.'
+          fi
           echo '--- end summary ---'
 
       - name: Upload security evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: origin-immunefi-readonly-scan
