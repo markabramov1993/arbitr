@@ -1,0 +1,78 @@
+name: Superteam Mato Detail
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/superteam-mato-detail.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Discover Mato listing and fetch full detail
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' | tee mato-detail.txt
+          import json, urllib.request, urllib.parse, urllib.error
+          UA={'User-Agent':'profit-engine-mato-detail/1.0'}
+          def get(url):
+              req=urllib.request.Request(url,headers=UA)
+              with urllib.request.urlopen(req,timeout=25) as r:
+                  return r.status,r.read()
+          status,body=get('https://earn.superteam.fun/api/listings?take=100')
+          data=json.loads(body)
+          rows=data if isinstance(data,list) else data.get('listings',data.get('data',data.get('items',[])))
+          if isinstance(rows,dict): rows=rows.get('data',rows.get('items',[]))
+          matches=[x for x in rows if 'mato research' in (x.get('title') or '').lower()]
+          print('MATO_MATCHES='+str(len(matches)))
+          if not matches:
+              raise SystemExit(0)
+          x=matches[0]
+          print('MATO_LISTING='+json.dumps(x,ensure_ascii=False,separators=(',',':')))
+          slug=x.get('slug')
+          lid=x.get('id')
+          candidates=[]
+          if slug:
+              candidates += [
+                  f'https://earn.superteam.fun/api/listings/details/{slug}',
+                  f'https://superteam.fun/api/listings/details/{slug}',
+                  f'https://earn.superteam.fun/api/listings/{slug}',
+              ]
+          if lid:
+              candidates += [
+                  f'https://earn.superteam.fun/api/listings/details/{lid}',
+                  f'https://earn.superteam.fun/api/listings/{lid}',
+              ]
+          detail=None
+          for url in candidates:
+              try:
+                  s,b=get(url); print('TRY',url,'STATUS',s)
+                  if s==200:
+                      detail=json.loads(b); break
+              except urllib.error.HTTPError as e:
+                  print('TRY',url,'STATUS',e.code)
+              except Exception as e:
+                  print('TRY',url,'ERROR',repr(e))
+          if detail is None:
+              print('DETAIL_UNAVAILABLE=true')
+          else:
+              print('MATO_DETAIL='+json.dumps(detail,ensure_ascii=False,separators=(',',':')))
+              with open('mato-detail.json','w') as f: json.dump(detail,f,ensure_ascii=False,indent=2)
+          PY
+      - name: Upload detail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mato-detail
+          path: |
+            mato-detail.txt
+            mato-detail.json
+          retention-days: 7
+          if-no-files-found: warn
