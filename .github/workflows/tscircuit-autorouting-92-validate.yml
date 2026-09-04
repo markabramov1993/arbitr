@@ -56,23 +56,31 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
+
           p = Path('target/algos/multi-layer-ijump/MultilayerIjump.ts')
           s = p.read_text()
-          old = '''        if (travelDir.wallDistance === Infinity) {
-            travelDirs3.push({
-              ...travelDir,
-              travelDistance: goalDistAlongTravelDir,
-              enterMarginCost: 0,
-              travelMarginCostFactor: 1,
-            })
-          } else if (travelDir.wallDistance > this.largestMargin) {'''
-          new = '''        if (
-            travelDir.wallDistance !== Infinity &&
-            travelDir.wallDistance > this.largestMargin
-          ) {'''
-          if old not in s:
-              raise SystemExit('Expected upstream block not found')
-          p.write_text(s.replace(old, new, 1))
+          pattern = re.compile(
+              r'(?m)^(?P<i>[ \t]*)if \(travelDir\.wallDistance === Infinity\) \{\n'
+              r'(?P=i)  travelDirs3\.push\(\{\n'
+              r'(?P=i)    \.\.\.travelDir,\n'
+              r'(?P=i)    travelDistance: goalDistAlongTravelDir,\n'
+              r'(?P=i)    enterMarginCost: 0,\n'
+              r'(?P=i)    travelMarginCostFactor: 1,\n'
+              r'(?P=i)  \}\)\n'
+              r'(?P=i)\} else if \(travelDir\.wallDistance > this\.largestMargin\) \{'
+          )
+          m = pattern.search(s)
+          if not m:
+              raise SystemExit('Expected upstream Infinity jump block not found')
+          i = m.group('i')
+          replacement = (
+              f'{i}if (\n'
+              f'{i}  travelDir.wallDistance !== Infinity &&\n'
+              f'{i}  travelDir.wallDistance > this.largestMargin\n'
+              f'{i}) {{'
+          )
+          p.write_text(s[:m.start()] + replacement + s[m.end():])
           PY
           cd target
           git diff -- algos/multi-layer-ijump/MultilayerIjump.ts algos/multi-layer-ijump/tests/wild-jump-regression.test.ts | tee ../autorouting-92.patch
@@ -85,9 +93,13 @@ jobs:
         working-directory: target
         run: bun test algos/multi-layer-ijump/tests
 
-      - name: Format check changed source
+      - name: Format changed source
         working-directory: target
-        run: bunx biome format algos/multi-layer-ijump/MultilayerIjump.ts algos/multi-layer-ijump/tests/wild-jump-regression.test.ts
+        run: bunx biome format --write algos/multi-layer-ijump/MultilayerIjump.ts algos/multi-layer-ijump/tests/wild-jump-regression.test.ts
+
+      - name: Re-run regression after formatting
+        working-directory: target
+        run: bun test algos/multi-layer-ijump/tests/wild-jump-regression.test.ts
 
       - name: Upload proof and patch
         if: always()
