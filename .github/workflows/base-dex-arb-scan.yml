@@ -15,6 +15,54 @@ permissions:
   contents: read
 
 jobs:
+  live-matrix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Fast live spot-spread shortlist
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 scripts/base_dex_spread_quick.py 2>&1 | tee base-dex-spread-quick.log
+      - name: Live Quoter matrix across WETH cbBTC cbXRP and sizes
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 scripts/base_dex_arb_scan.py 2>&1 | tee base-dex-arb-matrix.log
+      - name: Print only positive gross candidates
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          rows=[]
+          try:
+              lines=open('base-dex-arb-matrix.log',encoding='utf-8').read().splitlines()
+          except FileNotFoundError:
+              lines=[]
+          for line in lines:
+              try: o=json.loads(line)
+              except Exception: continue
+              if o.get('kind')=='route' and float(o.get('gross_pnl',0))>0:
+                  rows.append(o)
+          rows.sort(key=lambda x: float(x['gross_pnl']), reverse=True)
+          print('POSITIVE_GROSS_COUNT=',len(rows))
+          for r in rows[:20]: print('POSITIVE=',json.dumps(r,separators=(',',':')))
+          PY
+      - name: Upload live matrix evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: base-dex-live-matrix
+          path: |
+            base-dex-spread-quick.log
+            base-dex-arb-matrix.log
+          retention-days: 14
+
   cbBTC-fork:
     runs-on: ubuntu-24.04
     timeout-minutes: 8
@@ -36,4 +84,4 @@ jobs:
           path: cbbtc-fork.txt
           retention-days: 30
 
-# FLASH manual live/fork refresh: 2026-09-04T20:43Z
+# FLASH full live route matrix refresh: 2026-09-04T21:00Z
