@@ -83,9 +83,6 @@ jobs:
           contract GeneratedMorphoUSDCCandidatesTest is Test {{
             address constant MORPHO=address(uint160(1071767867375834718561649552532670117991385333707));
             address constant USDC=address(uint160(749071750893463290574776461331093852760741783827));
-            event log_named_uint(string key,uint256 val);
-            event log_named_address(string key,address val);
-            event log_named_string(string key,string val);
             struct Candidate {{ bytes32 id; address user; address loan; address coll; address oracle; address irm; uint256 lltv; uint8 collDec; uint256 apiHfE18; uint256 apiDebtUsdE6; }}
             function candidates() internal pure returns(Candidate[] memory cs) {{
               cs=new Candidate[]({len(candidates)});
@@ -124,7 +121,7 @@ jobs:
               uint256 spent=lb-IERC20(USDC).balanceOf(address(this));
               uint256 got=IERC20(c.coll).balanceOf(address(this))-cb;
               uint256 price=IOracle(c.oracle).price();
-              uint256 scale=10**uint256(42-c.collDec); // 1e36 * 10^(6-collateralDecimals), loan USDC=6d.
+              uint256 scale=10**uint256(42-c.collDec);
               uint256 value=got*price/scale;
               uint256 bonus=value>spent?value-spent:0;
               emit log_named_uint("SUCCESS_INDEX",idx);
