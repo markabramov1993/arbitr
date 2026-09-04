@@ -1,0 +1,28 @@
+name: RTC Payout Public Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/rtc-payout-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check public RustChain wallet
+        shell: bash
+        run: |
+          set -euo pipefail
+          MID='RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d'
+          echo '=== BALANCE ==='
+          curl -fsS --retry 3 --retry-delay 2 "https://rustchain.org/wallet/balance?miner_id=${MID}"
+          echo
+          echo '=== HISTORY ==='
+          curl -fsS --retry 3 --retry-delay 2 "https://rustchain.org/wallet/history?miner_id=${MID}&limit=20"
+          echo
