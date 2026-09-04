@@ -1,0 +1,37 @@
+name: Morpho Live Liquidation Fork
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - 'test/MorphoBaseLiveLiquidation.t.sol'
+      - '.github/workflows/morpho-live-liquidation-fork.yml'
+      - 'foundry.toml'
+
+permissions:
+  contents: read
+
+jobs:
+  liquidate-on-fork:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Run live Base fork liquidation test
+        shell: bash
+        run: |
+          set -euxo pipefail
+          forge test --match-contract MorphoBaseLiveLiquidationTest -vv 2>&1 | tee morpho-live-liquidation.log
+      - name: Upload fork evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: morpho-live-liquidation-evidence
+          path: morpho-live-liquidation.log
+          retention-days: 30
