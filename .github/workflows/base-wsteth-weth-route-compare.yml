@@ -1,0 +1,75 @@
+name: Base wstETH WETH Route Compare
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [profit-engine-v07]
+    paths: ['.github/workflows/base-wsteth-weth-route-compare.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: foundry-rs/foundry-toolchain@v1
+        with: {version: stable}
+      - name: Quote Uniswap V3 and Aerodrome Slipstream direct exits
+        shell: bash
+        run: |
+          set -euo pipefail
+          RPC='https://base-mainnet.g.alchemy.com/public'
+          WSTETH='c1cba3fcea344f92d9239c08c0568f6f2f0ee452'; WETH='4200000000000000000000000000000000000006'
+          UF='0x33128a8fC17869897dcE68Ed026d694621f6FDfD'; UQ='0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a'
+          AF='0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A'; AQ='0x254cF9E1E6e233aa1AC962CB9B05b2cfeAaE15b0'
+          export RPC WSTETH WETH UF UQ AF AQ
+          export SEL_SP=$(cast sig 'tickSpacings()'); export SEL_GP=$(cast sig 'getPool(address,address,int24)'); export SEL_AQ=$(cast sig 'quoteExactInput(bytes,uint256)')
+          python3 - <<'PY'
+          import os,json,urllib.request
+          rpc=os.environ['RPC']; wst=os.environ['WSTETH']; weth=os.environ['WETH']; af=os.environ['AF']; aq=os.environ['AQ']; uf=os.environ['UF']; uq=os.environ['UQ']
+          def call(to,data):
+              p={'jsonrpc':'2.0','id':1,'method':'eth_call','params':[{'to':to,'data':data},'latest']}
+              req=urllib.request.Request(rpc,data=json.dumps(p).encode(),headers={'content-type':'application/json','user-agent':'profit-engine-route-compare'})
+              with urllib.request.urlopen(req,timeout=30) as r:o=json.loads(r.read())
+              if 'error' in o: raise RuntimeError(o['error'])
+              return o['result']
+          def addr(a): return '0'*24+a.lower().replace('0x','')
+          def u256(x): return int(x).to_bytes(32,'big').hex()
+          def iword(x): return (x & ((1<<256)-1)).to_bytes(32,'big').hex()
+          def dyn_ints(raw):
+              h=raw[2:]; off=int(h[:64],16)*2; n=int(h[off:off+64],16); p=off+64; out=[]
+              for i in range(n):
+                  v=int(h[p+i*64:p+(i+1)*64],16); out.append(v-(1<<256) if v&(1<<255) else v)
+              return out
+          sp=dyn_ints(call(af,os.environ['SEL_SP']))
+          active=[]
+          for s in sp:
+              try:r=call(af,os.environ['SEL_GP']+addr(wst)+addr(weth)+iword(s)); pool='0x'+r[-40:]
+              except Exception:continue
+              if int(pool,16): active.append((s,pool))
+          print('AERODROME_ACTIVE',active)
+          amounts=[0.05,0.1,0.25,0.5,1,2,4,8,13.322412109739688]
+          # ABI helpers for Aerodrome quoteExactInput(bytes,uint256)
+          sel=os.environ['SEL_AQ'][2:]
+          def enc_bytes(raw):
+              b=bytes.fromhex(raw); pad=(32-len(b)%32)%32; return u256(len(b))+b.hex()+'00'*pad
+          for a in amounts:
+              wei=int(a*1e18); best_u=(0,0); best_a=(0,0)
+              for fee in (100,500,3000,10000):
+                  # QuoterV2 quoteExactInputSingle tuple: tokenIn,tokenOut,amountIn,fee,sqrtLimit
+                  sig='0xc6a5026a'  # cast sig quoteExactInputSingle((address,address,uint256,uint24,uint160))
+                  data=sig+addr(wst)+addr(weth)+u256(wei)+u256(fee)+u256(0)
+                  try:r=call(uq,data); out=int(r[2:66],16)
+                  except Exception:continue
+                  if out>best_u[0]: best_u=(out,fee)
+              for s,_ in active:
+                  path=wst+(s & 0xffffff).to_bytes(3,'big').hex()+weth
+                  data='0x'+sel+u256(64)+u256(wei)+enc_bytes(path)
+                  try:r=call(aq,data); out=int(r[2:66],16)
+                  except Exception:continue
+                  if out>best_a[0]: best_a=(out,s)
+              winner='AERODROME' if best_a[0]>best_u[0] else 'UNISWAP'
+              print(json.dumps({'wstETH_in':a,'uniswap_weth':best_u[0]/1e18,'uniswap_fee':best_u[1],'aerodrome_weth':best_a[0]/1e18,'aerodrome_spacing':best_a[1],'winner':winner,'delta_weth':abs(best_a[0]-best_u[0])/1e18}))
+          PY
