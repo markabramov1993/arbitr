@@ -1,0 +1,71 @@
+name: Morpho Base Liquidation History
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - '.github/workflows/morpho-base-liquidation-history.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  history:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Query recent real Base liquidations from Morpho API
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' | tee morpho-base-liquidations.jsonl
+          import json, urllib.request
+          API='https://api.morpho.org/graphql'
+          q='''query {
+            marketTransactions(
+              first: 100
+              orderBy: Timestamp
+              orderDirection: Desc
+              where: { chainId_in: [8453], type_in: [Liquidation] }
+            ) {
+              items {
+                blockNumber txHash logIndex timestamp type
+                user { address }
+                market {
+                  marketId lltv
+                  loanAsset { address symbol decimals }
+                  collateralAsset { address symbol decimals }
+                  oracle { address }
+                  irmAddress
+                }
+                data {
+                  ... on MarketTransactionLiquidationData {
+                    seizedAssets repaidAssets badDebtAssets liquidator
+                  }
+                }
+              }
+            }
+          }'''
+          req=urllib.request.Request(API,data=json.dumps({'query':q}).encode(),headers={'content-type':'application/json','user-agent':'profit-engine-v07-history'})
+          with urllib.request.urlopen(req,timeout=40) as r: out=json.loads(r.read())
+          if out.get('errors'):
+              print(json.dumps({'errors':out['errors']})); raise SystemExit(1)
+          items=out['data']['marketTransactions']['items']
+          print(json.dumps({'count':len(items)}))
+          for x in items:
+              d=x.get('data') or {}; m=x.get('market') or {}
+              row={
+                'block':x.get('blockNumber'),'tx':x.get('txHash'),'logIndex':x.get('logIndex'),'timestamp':x.get('timestamp'),
+                'borrower':(x.get('user') or {}).get('address'),'market':m.get('marketId'),'lltv':m.get('lltv'),
+                'loan':m.get('loanAsset'),'collateral':m.get('collateralAsset'),'oracle':(m.get('oracle') or {}).get('address'),'irm':m.get('irmAddress'),
+                'liquidator':d.get('liquidator'),'repaidAssets':d.get('repaidAssets'),'seizedAssets':d.get('seizedAssets'),'badDebtAssets':d.get('badDebtAssets')
+              }
+              print(json.dumps(row,separators=(',',':')))
+          PY
+      - name: Upload history
+        uses: actions/upload-artifact@v4
+        with:
+          name: morpho-base-liquidation-history
+          path: morpho-base-liquidations.jsonl
+          retention-days: 30
