@@ -1,0 +1,100 @@
+name: Base Morpho General Current Scan
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - '.github/workflows/base-morpho-general-current-scan.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Discover near-threshold positions and classify current on-chain health
+        shell: bash
+        run: |
+          set -euo pipefail
+          RPC='https://base-mainnet.g.alchemy.com/public'
+          LOCAL='http://127.0.0.1:8545'
+          API='https://api.morpho.org/graphql'
+          MORPHO='0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb'
+          EOA='0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
+
+          python3 - <<'PY' >/tmp/candidates.tsv
+          import json, urllib.request, time
+          API='https://api.morpho.org/graphql'
+          def gql(q):
+              req=urllib.request.Request(API,data=json.dumps({'query':q}).encode(),headers={'content-type':'application/json','user-agent':'profit-engine-general-live-scan'})
+              with urllib.request.urlopen(req,timeout=30) as r: out=json.loads(r.read())
+              if out.get('errors'): raise RuntimeError(out['errors'])
+              return out['data']
+          markets=gql('''query { markets(first: 60, orderBy: SupplyAssetsUsd, orderDirection: Desc, where: { chainId_in: [8453], listed: true }) { items { marketId lltv loanAsset { address symbol decimals } collateralAsset { address symbol decimals } oracle { address } irmAddress } } }''')['markets']['items']
+          rows=[]; positions=0
+          for m in markets:
+              mid=m['marketId']; lltv=int(m['lltv'])/1e18
+              q=f'''query {{ marketPositions(first: 100, orderBy: BorrowShares, orderDirection: Desc, where: {{ marketUniqueKey_in: ["{mid}"] }}) {{ items {{ user {{ address }} state {{ borrowShares borrowAssetsUsd collateral collateralUsd }} }} }} }}'''
+              try: ps=gql(q)['marketPositions']['items']
+              except Exception: continue
+              for p in ps:
+                  positions+=1; s=p['state']; debt=float(s.get('borrowAssetsUsd') or 0); coll=float(s.get('collateralUsd') or 0)
+                  if debt<=0 or coll<=0: continue
+                  hf=coll*lltv/debt
+                  if hf<=1.006:
+                      rows.append((hf,-debt,mid,p['user']['address'],m['loanAsset']['address'],m['loanAsset']['symbol'],m['loanAsset']['decimals'],m['collateralAsset']['address'],m['collateralAsset']['symbol'],m['collateralAsset']['decimals'],m['oracle']['address'],m['irmAddress'],m['lltv'],debt))
+              time.sleep(.015)
+          rows.sort()
+          print('#META\tmarkets=%d\tpositions=%d\tcandidates=%d' % (len(markets),positions,len(rows)))
+          for x in rows[:20]:
+              hf,negdebt,*rest=x
+              print('\t'.join(map(str,[hf]+rest)))
+          PY
+
+          head -n 1 /tmp/candidates.tsv
+          tail -n +2 /tmp/candidates.tsv >/tmp/candidates-only.tsv || true
+          echo "CANDIDATE_COUNT=$(wc -l </tmp/candidates-only.tsv | tr -d ' ')"
+          cat /tmp/candidates-only.tsv
+
+          anvil --fork-url "$RPC" --chain-id 8453 --port 8545 --silent >/tmp/anvil-general.log 2>&1 & PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          for i in {1..25}; do cast block-number --rpc-url "$LOCAL" >/dev/null 2>&1 && break; sleep 1; done
+          echo "CURRENT_FORK_BLOCK=$(cast block-number --rpc-url "$LOCAL")"
+
+          : >/tmp/unhealthy.tsv
+          while IFS=$'\t' read -r HF MARKET BORROWER LOAN LOAN_SYMBOL LOAN_DEC COLL COLL_SYMBOL COLL_DEC ORACLE IRM LLTV DEBT_USD; do
+            [ -n "$MARKET" ] || continue
+            POS=$(cast call "$MORPHO" 'position(bytes32,address)(uint256,uint128,uint128)' "$MARKET" "$BORROWER" --rpc-url "$LOCAL" 2>/dev/null || true)
+            SHARES=$(printf '%s\n' "$POS" | sed -n '2p' | awk '{print $1}')
+            [ -n "$SHARES" ] && [ "$SHARES" != 0 ] || continue
+
+            # No loan-token funding or approval is provided. A healthy position fails at Morpho's
+            # health check; an unhealthy position advances beyond that point and fails later on repayment.
+            set +e
+            PROBE=$(cast send "$MORPHO" 'liquidate((address,address,address,address,uint256),address,uint256,uint256,bytes)' \
+              "($LOAN,$COLL,$ORACLE,$IRM,$LLTV)" "$BORROWER" 0 "$SHARES" 0x \
+              --from "$EOA" --unlocked --rpc-url "$LOCAL" --json 2>&1)
+            RC=$?
+            set -e
+            if echo "$PROBE" | grep -qi 'position is healthy'; then
+              echo "HEALTHY api_hf=$HF debt_usd=$DEBT_USD loan=$LOAN_SYMBOL collateral=$COLL_SYMBOL market=$MARKET borrower=$BORROWER"
+              continue
+            fi
+            if [ "$RC" -eq 0 ]; then
+              echo "UNEXPECTED_PROBE_SUCCESS market=$MARKET borrower=$BORROWER"
+              continue
+            fi
+            # Reaching any non-health revert means Morpho did not reject the position as healthy.
+            REASON=$(echo "$PROBE" | tr '\n' ' ' | sed 's/\t/ /g' | cut -c1-260)
+            echo "UNHEALTHY_NOW api_hf=$HF debt_usd=$DEBT_USD loan=$LOAN_SYMBOL collateral=$COLL_SYMBOL market=$MARKET borrower=$BORROWER reason=$REASON"
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$HF" "$MARKET" "$BORROWER" "$LOAN" "$LOAN_SYMBOL" "$LOAN_DEC" "$COLL" "$COLL_SYMBOL" "$COLL_DEC" "$ORACLE" "$IRM" "$LLTV" "$DEBT_USD" "$SHARES" >>/tmp/unhealthy.tsv
+          done </tmp/candidates-only.tsv
+
+          echo "UNHEALTHY_COUNT=$(wc -l </tmp/unhealthy.tsv | tr -d ' ')"
+          cat /tmp/unhealthy.tsv
