@@ -1,0 +1,32 @@
+name: Verify Mova 53
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-mova-53.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Clone candidate branch
+        run: |
+          git clone --depth 1 --branch fix/issue-53-prettier-ci https://github.com/markabramov1993/mova-store.git mova-store
+
+      - name: Install dependencies
+        working-directory: mova-store
+        run: npm ci
+
+      - name: Verify Prettier check is green
+        working-directory: mova-store
+        run: npm run format:check
+
+      - name: Confirm CI contains format check
+        working-directory: mova-store
+        run: grep -n "npm run format:check" .github/workflows/ci.yml
