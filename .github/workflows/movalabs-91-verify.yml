@@ -1,0 +1,26 @@
+name: Verify Mova Labs #91
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'earn/movalabs-91.patch'
+      - '.github/workflows/movalabs-91-verify.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone Mova Store
+        run: git clone --depth 1 https://github.com/Movalabs-crew/mova-store.git target
+      - name: Apply bounty patch
+        run: cd target && git apply "$GITHUB_WORKSPACE/earn/movalabs-91.patch"
+      - name: Run checkout contract tests
+        working-directory: target/contracts/checkout
+        run: cargo test
