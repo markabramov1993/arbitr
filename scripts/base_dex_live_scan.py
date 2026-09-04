@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
-"""Read-only Base DEX cross-venue scanner.
+"""Read-only Base DEX cross-venue spot-edge scanner.
 
-Staged algorithm:
-1. Discover USDC pools on Uniswap V3 and the newest Aerodrome Slipstream CL factory.
-2. Compare slot0 spot prices and known pool fees to shortlist cross-venue edges.
-3. Exact-quote only the best edges at several sizes.
-4. Emit JSONL. A separate local-fork validator executes the best positive route.
+Algorithm:
+1. Discover USDC pools on Uniswap V3 and Aerodrome Slipstream V3.
+2. Read slot0 prices + onchain pool fee configuration.
+3. Rank only cross-venue edges after known swap fees.
+4. Hand positive edges to a separate Foundry local-fork executor which performs
+   the real two-swap route and measures final USDC.
 
-No private key, signing, transaction submission, or public-chain state mutation.
+The scanner itself does no signing, transaction submission, or public-chain
+state mutation. Final admission is based on fork execution, not spot math.
 """
 from __future__ import annotations
 
 import json
 import subprocess
-import time
 from dataclasses import dataclass
 
 RPCS = [
@@ -22,9 +23,8 @@ RPCS = [
 ]
 
 UNI_FACTORY = "0x33128a8fC17869897dcE68Ed026d694621f6FDfD"
-UNI_QUOTER = "0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a"
+# Aerodrome newest CLFactory (Slipstream V3 / Gauge V3 generation).
 AERO_FACTORY = "0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef"
-AERO_QUOTER = "0x514c8B5f54112481E28028F1166Bd78501089259"
 
 TOKENS = {
     "USDC": ("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 6),
@@ -34,7 +34,6 @@ TOKENS = {
 }
 UNI_FEES = (100, 500, 3000, 10000)
 FALLBACK_AERO_SPACINGS = (1, 10, 50, 100, 200)
-SIZES_USDC = (100.0, 500.0, 1_000.0, 2_500.0, 5_000.0, 10_000.0, 25_000.0)
 
 
 def _run_cast(address: str, sig: str, *args: object) -> str:
@@ -45,7 +44,7 @@ def _run_cast(address: str, sig: str, *args: object) -> str:
                 ["cast", "call", address, sig, *map(str, args), "--rpc-url", rpc],
                 capture_output=True,
                 text=True,
-                timeout=15,
+                timeout=12,
             )
         except Exception as exc:
             err = str(exc)
@@ -93,7 +92,7 @@ class VenuePool:
 
 def _pool_price(pool: str, asset_sym: str) -> float:
     asset, asset_dec = TOKENS[asset_sym]
-    usdc, usdc_dec = TOKENS["USDC"]
+    _, usdc_dec = TOKENS["USDC"]
     token0 = _first_addr(_run_cast(pool, "token0()(address)")).lower()
     sqrt_price_x96 = _first_int(
         _run_cast(pool, "slot0()(uint160,int24,uint16,uint16,uint16,bool)")
@@ -101,9 +100,16 @@ def _pool_price(pool: str, asset_sym: str) -> float:
     if sqrt_price_x96 <= 0:
         raise ValueError("zero sqrt price")
     raw_token1_per_token0 = (sqrt_price_x96 * sqrt_price_x96) / (2**192)
+    if raw_token1_per_token0 <= 0:
+        raise ValueError("invalid raw price")
     if token0 == asset.lower():
-        return raw_token1_per_token0 * (10**asset_dec) / (10**usdc_dec)
-    return (1.0 / raw_token1_per_token0) * (10**asset_dec) / (10**usdc_dec)
+        price = raw_token1_per_token0 * (10**asset_dec) / (10**usdc_dec)
+    else:
+        price = (1.0 / raw_token1_per_token0) * (10**asset_dec) / (10**usdc_dec)
+    # Obvious uninitialized/dust-price guard. The real fork executor remains final gate.
+    if not (1e-8 < price < 1e9):
+        raise ValueError(f"implausible spot price {price}")
+    return price
 
 
 def _discover(asset_sym: str, aero_spacings: list[int]) -> list[VenuePool]:
@@ -118,9 +124,7 @@ def _discover(asset_sym: str, aero_spacings: list[int]) -> list[VenuePool]:
             )
             if int(pool, 16) == 0:
                 continue
-            pools.append(
-                VenuePool("uni", fee, pool, _pool_price(pool, asset_sym), fee / 1_000_000)
-            )
+            pools.append(VenuePool("uni", fee, pool, _pool_price(pool, asset_sym), fee / 1_000_000))
         except Exception:
             continue
 
@@ -135,83 +139,19 @@ def _discover(asset_sym: str, aero_spacings: list[int]) -> list[VenuePool]:
                 fee_raw = _first_int(_run_cast(AERO_FACTORY, "getSwapFee(address)(uint24)", pool))
                 fee_fraction = fee_raw / 1_000_000
             except Exception:
-                # Conservative fallback rather than pretending an unknown fee is zero.
+                # Conservative fallback. A route with unknown fee is not promoted cheaply.
                 fee_fraction = 0.003
-            pools.append(
-                VenuePool("aero", spacing, pool, _pool_price(pool, asset_sym), fee_fraction)
-            )
+            pools.append(VenuePool("aero", spacing, pool, _pool_price(pool, asset_sym), fee_fraction))
         except Exception:
             continue
-
     return pools
-
-
-def _quote(venue: str, tier: int, token_in: str, token_out: str, amount: int) -> int:
-    if venue == "uni":
-        return _first_int(
-            _run_cast(
-                UNI_QUOTER,
-                "quoteExactInputSingle((address,address,uint256,uint24,uint160))(uint256,uint160,uint32,uint256)",
-                f"({token_in},{token_out},{amount},{tier},0)",
-            )
-        )
-    if venue == "aero":
-        return _first_int(
-            _run_cast(
-                AERO_QUOTER,
-                "quoteExactInputSingle(address,address,int24,uint256,uint160)(uint256)",
-                token_in,
-                token_out,
-                tier,
-                amount,
-                0,
-            )
-        )
-    raise ValueError(f"unknown venue {venue}")
-
-
-def _exact_route(asset_sym: str, low: VenuePool, high: VenuePool, amount_usdc: float):
-    usdc, usdc_dec = TOKENS["USDC"]
-    asset, asset_dec = TOKENS[asset_sym]
-    amount_in = int(round(amount_usdc * (10**usdc_dec)))
-    try:
-        mid_out = _quote(low.venue, low.tier, usdc, asset, amount_in)
-        if mid_out <= 0:
-            return None
-        final_out = _quote(high.venue, high.tier, asset, usdc, mid_out)
-        if final_out <= 0:
-            return None
-    except Exception as exc:
-        return {"kind": "quote_error", "pair": f"{asset_sym}/USDC", "amount_in": amount_usdc, "error": str(exc)[:180]}
-
-    gross_raw = final_out - amount_in
-    return {
-        "kind": "exact_route",
-        "pair": f"{asset_sym}/USDC",
-        "asset": asset_sym,
-        "amount_in_usdc": amount_usdc,
-        "amount_in_raw": amount_in,
-        "buy_venue": low.venue,
-        "buy_tier": low.tier,
-        "buy_pool": low.pool,
-        "asset_out": mid_out / (10**asset_dec),
-        "asset_out_raw": mid_out,
-        "sell_venue": high.venue,
-        "sell_tier": high.tier,
-        "sell_pool": high.pool,
-        "final_usdc": final_out / (10**usdc_dec),
-        "final_raw": final_out,
-        "gross_usdc": gross_raw / (10**usdc_dec),
-        "gross_bps": (gross_raw / amount_in) * 10_000,
-    }
 
 
 def main() -> int:
     aero_spacings = _aero_spacings()
     print(json.dumps({"kind": "meta", "aero_spacings": aero_spacings}, separators=(",", ":")))
 
-    exact_results = []
-    spot_edges = []
+    edges = []
     for asset_sym in ("WETH", "cbBTC", "cbXRP"):
         venues = _discover(asset_sym, aero_spacings)
         for v in venues:
@@ -225,14 +165,17 @@ def main() -> int:
                 "fee_bps": v.fee_fraction * 10_000,
             }, separators=(",", ":")))
 
-        for uni in [v for v in venues if v.venue == "uni"]:
-            for aero in [v for v in venues if v.venue == "aero"]:
+        unis = [v for v in venues if v.venue == "uni"]
+        aeros = [v for v in venues if v.venue == "aero"]
+        for uni in unis:
+            for aero in aeros:
                 low, high = (uni, aero) if uni.price_usdc_per_asset < aero.price_usdc_per_asset else (aero, uni)
                 spread = high.price_usdc_per_asset / low.price_usdc_per_asset - 1
                 fee_sum = low.fee_fraction + high.fee_fraction
                 edge_bps = (spread - fee_sum) * 10_000
-                spot = {
+                row = {
                     "kind": "spot_edge",
+                    "asset": asset_sym,
                     "pair": f"{asset_sym}/USDC",
                     "buy_venue": low.venue,
                     "buy_tier": low.tier,
@@ -244,35 +187,18 @@ def main() -> int:
                     "fees_bps": fee_sum * 10_000,
                     "spot_edge_bps_before_slippage_gas": edge_bps,
                 }
-                spot_edges.append((edge_bps, asset_sym, low, high, spot))
-                print(json.dumps(spot, separators=(",", ":")))
+                edges.append(row)
+                print(json.dumps(row, separators=(",", ":")))
 
-    # Only exact-quote the strongest cross-venue edges. Negative spot edges can still
-    # hide tiny quote differences, so keep a modest -10 bps admission window.
-    spot_edges.sort(key=lambda x: x[0], reverse=True)
-    selected = spot_edges[:8]
-    for edge_bps, asset_sym, low, high, _ in selected:
-        if edge_bps < -10:
-            continue
-        for size in SIZES_USDC:
-            result = _exact_route(asset_sym, low, high, size)
-            if result:
-                print(json.dumps(result, separators=(",", ":")))
-                if result.get("kind") == "exact_route":
-                    exact_results.append(result)
-            time.sleep(0.015)
-
-    exact_results.sort(key=lambda x: x["gross_usdc"], reverse=True)
-    profitable = [x for x in exact_results if x["gross_usdc"] > 0]
-    best = profitable[0] if profitable else (exact_results[0] if exact_results else None)
-    summary = {
+    edges.sort(key=lambda x: x["spot_edge_bps_before_slippage_gas"], reverse=True)
+    positive = [x for x in edges if x["spot_edge_bps_before_slippage_gas"] > 0]
+    print(json.dumps({
         "kind": "summary",
-        "spot_edges": len(spot_edges),
-        "exact_routes": len(exact_results),
-        "profitable_before_gas": len(profitable),
-        "best": best,
-    }
-    print(json.dumps(summary, separators=(",", ":")))
+        "spot_edges": len(edges),
+        "positive_spot_edges": len(positive),
+        "best_spot": positive[0] if positive else (edges[0] if edges else None),
+        "final_gate": "fresh_fork_real_swaps",
+    }, separators=(",", ":")))
     return 0
 
 
