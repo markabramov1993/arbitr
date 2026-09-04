@@ -35,3 +35,5 @@ jobs:
           name: cbbtc-fork-evidence
           path: cbbtc-fork.txt
           retention-days: 30
+
+# FLASH manual live/fork refresh: 2026-09-04T20:43Z
