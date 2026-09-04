@@ -24,7 +24,10 @@ jobs:
           for A in \
             0xb00e68fb3754EE8CC7B5F61348a2f09d53fB2e0e \
             0xeb3Ad4395924b76eB64b3d6aBabA0B62875b1A1f \
-            0x43151D66D653aD888Bf909F006A01792d5f33243
+            0x43151D66D653aD888Bf909F006A01792d5f33243 \
+            0xe5ec87a39445B8D5b751B116802a53C5ae7E9dF1 \
+            0x05c84a58fe042275b37Db038bAacd15F410C7Bb0 \
+            0xd175Aa4eD3AECCD03266C2bBBB16B0b419d005AA
           do
             echo "=== $A ==="
             echo -n 'description: '; cast call "$A" 'description()(string)' --rpc-url "$RPC" || true
