@@ -1,6 +1,5 @@
 name: Base DEX Live Watch
 
-# manual freshness kick: 2026-09-04 evening pulse
 on:
   workflow_dispatch:
   schedule:
@@ -47,17 +46,6 @@ jobs:
           rm -rf dexwatch
           forge init dexwatch --force --empty >/dev/null
           python3 scripts/generate_base_dex_fork_test.py base-dex-live-scan.jsonl dexwatch/test/GeneratedBaseDexArb.t.sol | tee dex-generator.log
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('dexwatch/test/GeneratedBaseDexArb.t.sol')
-          s = p.read_text()
-          old = 'uint256[6] memory fixedSizes = [100000000,500000000,1000000000,2500000000,5000000000,10000000000];'
-          new = 'uint256[6] memory fixedSizes = [uint256(100000000),uint256(500000000),uint256(1000000000),uint256(2500000000),uint256(5000000000),uint256(10000000000)];'
-          if old not in s:
-              raise SystemExit('expected fixedSizes generator line not found')
-          p.write_text(s.replace(old, new))
-          print('GENERATOR_UINT256_CAST_FIX=applied')
-          PY
           echo '=== SHORTLIST ==='
           cat dex-candidate.json
 
