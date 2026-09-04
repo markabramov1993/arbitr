@@ -60,10 +60,11 @@ jobs:
           candidates=candidates[:100]
           print('GENERATED_CANDIDATES',len(candidates))
           for c in candidates[:20]: print('CANDIDATE',json.dumps(c,separators=(',',':')))
-          def addr(x): return 'address('+x+')'
+          # Emit addresses as decimal uint160 casts so solc never interprets
+          # generated lower-case hex strings as EIP-55 address literals.
+          def addr(x): return f'address(uint160({int(x,16)}))'
           lines=[]
           for i,c in enumerate(candidates):
-              # Store API HF scaled 1e18 only for logs.
               hf=int(max(c['hf'],0)*1e18)
               lines.append(f'''        cs[{i}] = Candidate(bytes32({c['mid']}), {addr(c['user'])}, {addr(c['loan'])}, {addr(c['coll'])}, {addr(c['oracle'])}, {addr(c['irm'])}, {c['lltv']}, {c['collDec']}, {hf}, {int(c['debt']*1e6)});''')
           source=f'''// SPDX-License-Identifier: MIT
@@ -79,8 +80,8 @@ jobs:
           interface Vm {{ function createSelectFork(string calldata) external returns(uint256); function deal(address,uint256) external; }}
           contract GeneratedMorphoWETHCandidatesTest {{
             Vm constant vm=Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
-            address constant MORPHO=0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb;
-            address constant WETH=0x4200000000000000000000000000000000000006;
+            address constant MORPHO=address(uint160(1071767867375834718561649552532670117991385333707));
+            address constant WETH=address(uint160(376793390874373408599387495934666716005045108742));
             event log_named_uint(string key,uint256 val);
             event log_named_address(string key,address val);
             event log_named_string(string key,string val);
@@ -111,7 +112,6 @@ jobs:
                 _record(c,idx,"FULL_DEBT",wb,cb,seized,repaid); return true;
               }} catch Error(string memory reason) {{
                 if(keccak256(bytes(reason))==keccak256(bytes("position is healthy"))) {{ return false; }}
-                // Full debt can fail for bad debt if computed seized collateral exceeds what the borrower has.
                 try IMorpho(MORPHO).liquidate(p,c.user,uint256(collateral),0,"") returns(uint256 seized2,uint256 repaid2) {{
                   _record(c,idx,"ALL_COLLATERAL",wb,cb,seized2,repaid2); return true;
                 }} catch {{ return false; }}
@@ -125,7 +125,7 @@ jobs:
               uint256 spent=wb-IERC20(WETH).balanceOf(address(this));
               uint256 got=IERC20(c.coll).balanceOf(address(this))-cb;
               uint256 price=IOracle(c.oracle).price();
-              uint256 scale=10**uint256(54-c.collDec); // 1e36 * 10^(18-collateralDecimals), loan=WETH 18d.
+              uint256 scale=10**uint256(54-c.collDec);
               uint256 value=got*price/scale;
               uint256 bonus=value>spent?value-spent:0;
               emit log_named_uint("SUCCESS_INDEX",idx);
