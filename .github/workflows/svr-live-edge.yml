@@ -26,3 +26,5 @@ jobs:
           name: svr-live-edge
           path: svr-live-edge.log
           retention-days: 30
+
+# FLASH manual SVR refresh: 2026-09-04T20:46Z
