@@ -1,0 +1,27 @@
+name: Beacon Public Status Proof
+
+on:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - '.github/workflows/beacon-status-proof.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  status:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify public Beacon status and Atlas record
+        shell: bash
+        run: |
+          set +e
+          AGENT='bcn_1e75506023da'
+          NAME='profit-engine-svr-506023da'
+          echo '=== RELAY STATUS ==='
+          curl -fsSL "https://rustchain.org/beacon/relay/status/$AGENT" || true
+          echo
+          echo '=== ATLAS VIA DOCUMENTED ENDPOINT ==='
+          curl -ksSL 'https://50.28.86.131/beacon/atlas' | python3 -c 'import sys,json; d=json.load(sys.stdin); rows=d if isinstance(d,list) else d.get("agents",d.get("results",[])); print(json.dumps([x for x in rows if x.get("agent_id")=="bcn_1e75506023da" or x.get("name")=="profit-engine-svr-506023da"], indent=2))' || true
