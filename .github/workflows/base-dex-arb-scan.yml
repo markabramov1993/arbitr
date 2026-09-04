@@ -6,6 +6,7 @@ on:
     paths:
       - 'scripts/base_dex_arb_scan.py'
       - 'scripts/base_dex_spread_quick.py'
+      - 'scripts/cbbtc_focused_quote.py'
       - '.github/workflows/base-dex-arb-scan.yml'
   workflow_dispatch:
 
@@ -13,7 +14,7 @@ permissions:
   contents: read
 
 jobs:
-  quick-spread:
+  focused-cbbtc:
     runs-on: ubuntu-24.04
     timeout-minutes: 4
     steps:
@@ -21,13 +22,13 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           version: stable
-      - name: Fast Uniswap vs Aerodrome spread shortlist
+      - name: Quote cbBTC Uniswap-Aerodrome roundtrips
         shell: bash
-        run: python3 scripts/base_dex_spread_quick.py | tee base-dex-spread.jsonl
+        run: python3 scripts/cbbtc_focused_quote.py | tee cbbtc-focused-quote.jsonl
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: base-dex-spread-evidence
-          path: base-dex-spread.jsonl
+          name: cbbtc-focused-quote-evidence
+          path: cbbtc-focused-quote.jsonl
           retention-days: 30
