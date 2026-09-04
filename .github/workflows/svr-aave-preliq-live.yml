@@ -1,0 +1,36 @@
+name: SVR Aave Pre-Liquidation Live
+
+on:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - 'scripts/svr_aave_preliq_live.py'
+      - '.github/workflows/svr-aave-preliq-live.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preliq:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Install websocket client
+        run: python3 -m pip install --user 'websockets>=14,<16'
+      - name: Index Aave borrowers and watch live ETH SVR auctions
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 scripts/svr_aave_preliq_live.py 2>&1 | tee svr-aave-preliq.log
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: svr-aave-preliq-evidence
+          path: svr-aave-preliq.log
+          retention-days: 30
