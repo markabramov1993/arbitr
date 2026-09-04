@@ -1,0 +1,55 @@
+name: Superteam Public Detail
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/superteam-public-detail.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Fetch full public listing records with endpoint fallbacks
+        shell: bash
+        run: |
+          set -euo pipefail
+          for SLUG in steve-agent-arena-launch-your-agent-and-win-500-usdc zns-sol; do
+            echo "=== $SLUG ==="
+            OK=0
+            for BASE in https://earn.superteam.fun https://superteam.fun; do
+              for PATH in "/api/listings/details/$SLUG" "/api/listings/$SLUG"; do
+                URL="$BASE$PATH"
+                HTTP=$(curl -L -sS -o /tmp/detail.json -w '%{http_code}' "$URL")
+                echo "TRY $URL -> $HTTP"
+                if [ "$HTTP" = 200 ]; then
+                  cp /tmp/detail.json "$SLUG.json"
+                  python3 - "$SLUG.json" <<'PY'
+          import json,sys
+          p=sys.argv[1]
+          d=json.load(open(p))
+          print(json.dumps(d,ensure_ascii=False,indent=2)[:60000])
+          PY
+                  OK=1
+                  break 2
+                fi
+              done
+            done
+            if [ "$OK" = 0 ]; then
+              echo '{"error":"detail endpoints unavailable"}' > "$SLUG.json"
+            fi
+          done
+      - name: Upload details
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: superteam-public-details
+          path: |
+            steve-agent-arena-launch-your-agent-and-win-500-usdc.json
+            zns-sol.json
+          retention-days: 7
