@@ -1,0 +1,115 @@
+name: Beacon First Capital Proof
+
+on:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - '.github/workflows/beacon-first-capital.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  register-and-ping:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - name: Install Beacon
+        run: python3 -m pip install --user 'beacon-skill>=2.16'
+
+      - name: Register agent, send signed RTC-tip envelope, verify Atlas
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, time, secrets, requests
+          from beacon_skill.identity import AgentIdentity
+          from beacon_skill.codec import encode_envelope, decode_envelopes, verify_envelope
+          from beacon_skill.transports.relay import RelayClient
+
+          RELAY = 'https://rustchain.org/beacon'
+          identity = AgentIdentity.generate()
+          name = 'profit-engine-svr-' + identity.agent_id[-8:]
+          client = RelayClient(RELAY, timeout_s=20)
+
+          reg = client.register(
+              identity,
+              model_id='gpt-5.6-sol',
+              provider='openai',
+              capabilities=['defi-research','svr-monitoring','liquidation-simulation'],
+              name=name,
+          )
+          token = reg.get('relay_token') or reg.get('token')
+          if not token:
+              raise RuntimeError('registration did not return relay token: ' + json.dumps({k:v for k,v in reg.items() if 'token' not in k.lower()}))
+
+          # Never print token or private key.
+          print('REGISTERED_PUBLIC', json.dumps({
+              'agent_id': identity.agent_id,
+              'name': name,
+              'public_key_hex': identity.public_key_hex,
+              'registration_ok': bool(reg.get('ok', True)),
+          }, separators=(',',':')))
+
+          hb = client.heartbeat(identity.agent_id, token, status='alive', health={'service':'profit-engine','mode':'svr-readonly'})
+          print('HEARTBEAT_PUBLIC', json.dumps({k:v for k,v in hb.items() if 'token' not in k.lower()}, separators=(',',':')))
+
+          discovered = client.discover()
+          rows = discovered if isinstance(discovered, list) else discovered.get('agents', [])
+          target = None
+          for row in rows:
+              aid = row.get('agent_id') or row.get('id')
+              status = str(row.get('status') or '').lower()
+              if aid and aid != identity.agent_id and status in ('active','alive','online'):
+                  target = aid
+                  break
+          if target is None:
+              for row in rows:
+                  aid = row.get('agent_id') or row.get('id')
+                  if aid and aid != identity.agent_id:
+                      target = aid
+                      break
+          if not target:
+              raise RuntimeError('no relay target discovered')
+
+          payload = {
+              'kind':'hello',
+              'from':identity.agent_id,
+              'to':target,
+              'text':'Profit Engine SVR agent online — signed proof-of-commerce ping',
+              'rtc_tip':0.1,
+              'ts':int(time.time()),
+              'nonce':'pe-' + secrets.token_hex(8),
+          }
+          signed_text = encode_envelope(payload, version=2, identity=identity, include_pubkey=True)
+          decoded = decode_envelopes(signed_text)
+          if not decoded or not verify_envelope(decoded[0]):
+              raise RuntimeError('self-verification of signed envelope failed')
+          envelope = decoded[0]
+          sent = client.send_message(identity.agent_id, token, envelope)
+          print('PING_PUBLIC', json.dumps({
+              'from':identity.agent_id,
+              'to':target,
+              'kind':envelope.get('kind'),
+              'rtc_tip':envelope.get('rtc_tip'),
+              'nonce':envelope.get('nonce'),
+              'verified':True,
+              'relay_result':{k:v for k,v in sent.items() if 'token' not in k.lower()},
+          }, separators=(',',':')))
+
+          atlas = requests.get('https://rustchain.org/beacon/atlas', timeout=20).json()
+          atlas_rows = atlas if isinstance(atlas, list) else atlas.get('agents', atlas.get('results', []))
+          found = [x for x in atlas_rows if x.get('agent_id') == identity.agent_id or x.get('name') == name]
+          print('ATLAS_PUBLIC', json.dumps(found[:1], separators=(',',':')))
+          if not found:
+              raise RuntimeError('agent not found in public Atlas after registration')
+
+          # Keep the agent active while the claim is submitted/reviewable in this session.
+          for _ in range(20):
+              time.sleep(30)
+              try:
+                  client.heartbeat(identity.agent_id, token, status='alive', health={'service':'profit-engine','mode':'svr-readonly'})
+              except Exception as e:
+                  print('HEARTBEAT_RETRY', type(e).__name__)
+          print('ACTIVE_WINDOW_COMPLETE', identity.agent_id, name)
+          PY
