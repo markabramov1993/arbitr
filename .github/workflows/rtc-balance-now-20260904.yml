@@ -1,0 +1,30 @@
+name: RTC Balance Now
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/rtc-balance-now-20260904.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check RustChain balance and ledger read-only
+        shell: bash
+        run: |
+          set -euxo pipefail
+          WALLET='RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d'
+          echo '=== BALANCE ==='
+          curl -fsSL --retry 2 --max-time 20 "https://rustchain.org/wallet/balance?miner_id=$WALLET" || true
+          echo
+          echo '=== LEDGER ==='
+          curl -fsSL --retry 2 --max-time 20 "https://rustchain.org/wallet/ledger?miner_id=$WALLET" || true
+          echo
+          echo '=== HEALTH ==='
+          curl -fsSL --retry 2 --max-time 20 'https://rustchain.org/health' || true
