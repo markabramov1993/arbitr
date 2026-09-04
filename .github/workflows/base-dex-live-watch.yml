@@ -1,5 +1,6 @@
 name: Base DEX Live Watch
 
+# manual freshness kick: 2026-09-04 evening pulse
 on:
   workflow_dispatch:
   schedule:
