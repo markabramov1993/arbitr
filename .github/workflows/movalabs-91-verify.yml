@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
     paths:
-      - 'earn/movalabs-91.patch'
       - '.github/workflows/movalabs-91-verify.yml'
   workflow_dispatch:
 
@@ -16,22 +15,16 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - name: Clone Mova Store
-        run: git clone --depth 1 https://github.com/Movalabs-crew/mova-store.git target
-      - name: Apply exact test replacement
-        shell: bash
+      - name: Clone exact PR #257 head
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('target/contracts/checkout/src/test.rs')
-          s=p.read_text()
-          s=s.replace('use soroban_sdk::{contract, contractimpl, contracttype, Address, BytesN, Env};','use soroban_sdk::{contract, contractimpl, contracttype, Address, BytesN, Env, Event as _};')
-          s=s.replace('use crate::errors::Error;\n','use crate::errors::Error;\nuse crate::events::{OrderCreated, OrderShipped, PaymentReceived};\n',1)
-          old='''#[test]\nfn test_events_emitted() {\n    let env = Env::default();\n    env.mock_all_auths();\n\n    let (client, token, _, buyer, checkout) = setup_usdc(&env);\n    let id = order_id(&env, 5);\n\n    client.create_order(&buyer, &id, &token, &10_000);\n    client.pay(&token, &buyer, &id, &10_000);\n    client.dispatch(&id);\n\n    // At least one contract event should be recorded for the lifecycle.\n    let events = env.events().all().filter_by_contract(&checkout);\n    assert!(\n        !events.events().is_empty(),\n        "expected contract events for create/pay/dispatch"\n    );\n}\n'''
-          new='''#[test]\nfn test_events_emitted() {\n    let env = Env::default();\n    env.mock_all_auths();\n\n    let (client, token, merchant, buyer, checkout) = setup_usdc(&env);\n    let id = order_id(&env, 5);\n    let amount = 10_000;\n    let timestamp = env.ledger().timestamp();\n\n    client.create_order(&buyer, &id, &token, &amount);\n    let events = env.events().all().filter_by_contract(&checkout);\n    assert_eq!(events.events(), &[OrderCreated { token: token.clone(), buyer: buyer.clone(), order_id: id.clone(), amount, timestamp }.to_xdr(&env, &checkout)]);\n\n    client.pay(&token, &buyer, &id, &amount);\n    let events = env.events().all().filter_by_contract(&checkout);\n    assert_eq!(events.events(), &[PaymentReceived { token: token.clone(), buyer: buyer.clone(), merchant: merchant.clone(), order_id: id.clone(), amount }.to_xdr(&env, &checkout)]);\n\n    client.dispatch(&id);\n    let events = env.events().all().filter_by_contract(&checkout);\n    assert_eq!(events.events(), &[OrderShipped { order_id: id, merchant, amount }.to_xdr(&env, &checkout)]);\n}\n'''
-          if old not in s: raise SystemExit('old test block not found')
-          p.write_text(s.replace(old,new,1))
-          PY
+          git clone --depth 1 --branch fix/issue-91-lifecycle-events https://github.com/markabramov1993/mova-store.git target
+          cd target
+          echo "PR_HEAD=$(git rev-parse HEAD)"
+      - name: Show issue-scope diff
+        working-directory: target
+        run: |
+          git diff --stat origin/main...HEAD || true
+          git show --stat --oneline --decorate HEAD
       - name: Run checkout contract tests
         working-directory: target/contracts/checkout
         run: cargo test
