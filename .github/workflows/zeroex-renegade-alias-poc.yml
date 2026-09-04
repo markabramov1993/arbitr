@@ -38,60 +38,33 @@ jobs:
           cd zeroex
           python3 - <<'PY'
           from pathlib import Path
-          p=Path('test/utils/RenegadeIntegration.sol')
-          s=p.read_text()
-          marker='\n}'
-          idx=s.rfind(marker)
+          p = Path('test/utils/RenegadeIntegration.sol')
+          s = p.read_text()
+          idx = s.rfind('\n}')
           assert idx > 0
-          probes='''
-
-    function _probeOptionsOffset(uint256 optionsOffset) internal {
-        bytes memory original = _txnCalldata();
-        uint256 actualOffset;
-        assembly ("memory-safe") {
-            actualOffset := mload(add(0x144, original))
-        }
-        emit log_named_uint("ORIGINAL_OPTIONS_OFFSET", actualOffset);
-        emit log_named_uint("PROBE_OPTIONS_OFFSET", optionsOffset);
-
-        bytes memory renegadeData = _compactPayload(_withOptionsOffset(original, optionsOffset));
-        bytes memory ahData = _buildExecDataFromPayload(
-            renegadeData,
-            address(settler),
-            type(uint256).max,
-            false,
-            0,
-            0,
-            toToken(),
-            0
-        );
-
-        deal(address(fromToken()), address(this), amount());
-        fromToken().approve(address(allowanceHolder), amount());
-        try allowanceHolder.exec(address(settler), address(fromToken()), amount(), payable(address(settler)), ahData) {
-            emit log_named_uint("ALIAS_EXECUTED", optionsOffset);
-            emit log_named_uint("OUTPUT_BALANCE", balanceOf(toToken(), address(this)));
-        } catch {
-            emit log_named_uint("ALIAS_REVERTED", optionsOffset);
-        }
-    }
-
-    function testAliasOffset0140() public { _probeOptionsOffset(0x140); }
-    function testAliasOffset0160() public { _probeOptionsOffset(0x160); }
-    function testAliasOffset0180() public { _probeOptionsOffset(0x180); }
-    function testAliasOffset01a0() public { _probeOptionsOffset(0x1a0); }
-    function testAliasOffset01c0() public { _probeOptionsOffset(0x1c0); }
-    function testAliasOffset01e0() public { _probeOptionsOffset(0x1e0); }
-    function testAliasOffset0200() public { _probeOptionsOffset(0x200); }
-    function testAliasOffset0220() public { _probeOptionsOffset(0x220); }
-    function testAliasOffset0240() public { _probeOptionsOffset(0x240); }
-    function testAliasOffset0260() public { _probeOptionsOffset(0x260); }
-    function testAliasOffset0280() public { _probeOptionsOffset(0x280); }
-    function testAliasOffset02a0() public { _probeOptionsOffset(0x2a0); }
-    function testAliasOffset02c0() public { _probeOptionsOffset(0x2c0); }
-    function testAliasOffset02e0() public { _probeOptionsOffset(0x2e0); }
-    function testAliasOffset0300() public { _probeOptionsOffset(0x300); }
-'''
+          lines = [
+              '',
+              '    function _probeOptionsOffset(uint256 optionsOffset) internal {',
+              '        bytes memory original = _txnCalldata();',
+              '        uint256 actualOffset;',
+              '        assembly ("memory-safe") { actualOffset := mload(add(0x144, original)) }',
+              '        emit log_named_uint("ORIGINAL_OPTIONS_OFFSET", actualOffset);',
+              '        emit log_named_uint("PROBE_OPTIONS_OFFSET", optionsOffset);',
+              '        bytes memory renegadeData = _compactPayload(_withOptionsOffset(original, optionsOffset));',
+              '        bytes memory ahData = _buildExecDataFromPayload(renegadeData, address(settler), type(uint256).max, false, 0, 0, toToken(), 0);',
+              '        deal(address(fromToken()), address(this), amount());',
+              '        fromToken().approve(address(allowanceHolder), amount());',
+              '        try allowanceHolder.exec(address(settler), address(fromToken()), amount(), payable(address(settler)), ahData) {',
+              '            emit log_named_uint("ALIAS_EXECUTED", optionsOffset);',
+              '            emit log_named_uint("OUTPUT_BALANCE", balanceOf(toToken(), address(this)));',
+              '        } catch {',
+              '            emit log_named_uint("ALIAS_REVERTED", optionsOffset);',
+              '        }',
+              '    }',
+          ]
+          for off in range(0x140, 0x401, 0x20):
+              lines.append(f'    function testAliasOffset{off:04x}() public {{ _probeOptionsOffset(0x{off:x}); }}')
+          probes = '\n'.join(lines) + '\n'
           p.write_text(s[:idx] + probes + s[idx:])
           PY
 
