@@ -1,0 +1,91 @@
+name: Build Mova53 Formatted Blobs
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-mova53-formatted-blobs.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout arbitr build branch
+        uses: actions/checkout@v4
+        with:
+          ref: mova53-format-build
+          fetch-depth: 0
+
+      - name: Clone Mova issue 53 branch
+        run: |
+          rm -rf /tmp/mova-store
+          git clone --depth 1 --branch fix/issue-53-prettier-ci https://github.com/markabramov1993/mova-store.git /tmp/mova-store
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: /tmp/mova-store/package-lock.json
+
+      - name: Install and format
+        working-directory: /tmp/mova-store
+        run: |
+          npm ci
+          npm run format
+          npm run format:check
+
+      - name: Mirror changed formatted files and build manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf tmp/mova53-formatted tmp/mova53-formatted-manifest.json
+          mkdir -p tmp/mova53-formatted
+
+          cd /tmp/mova-store
+          git diff --name-only -z > /tmp/mova53-changed.z
+
+          python3 - <<'PY'
+          import json, os, pathlib, shutil, subprocess
+          src = pathlib.Path('/tmp/mova-store')
+          dst = pathlib.Path(os.environ['GITHUB_WORKSPACE']) / 'tmp/mova53-formatted'
+          raw = pathlib.Path('/tmp/mova53-changed.z').read_bytes().split(b'\0')
+          paths = [p.decode() for p in raw if p]
+          rows = []
+          for rel in paths:
+              s = src / rel
+              d = dst / rel
+              d.parent.mkdir(parents=True, exist_ok=True)
+              shutil.copy2(s, d)
+              sha = subprocess.check_output(['git','hash-object',str(d)], text=True).strip()
+              rows.append({'path': rel, 'sha': sha, 'mode': '100644', 'type': 'blob'})
+          manifest = pathlib.Path(os.environ['GITHUB_WORKSPACE']) / 'tmp/mova53-formatted-manifest.json'
+          manifest.write_text(json.dumps({'count': len(rows), 'files': rows}, indent=2) + '\n')
+          print('FORMATTED_FILE_COUNT=', len(rows))
+          for r in rows:
+              print('FORMATTED=', r['path'], r['sha'])
+          PY
+
+          cd "$GITHUB_WORKSPACE"
+          git add tmp/mova53-formatted tmp/mova53-formatted-manifest.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if git diff --cached --quiet; then
+            echo 'Mirror already up to date.'
+          else
+            git commit -m 'build: mirror formatted Mova issue 53 blobs'
+            git push origin HEAD:mova53-format-build
+          fi
+
+      - name: Upload manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mova53-formatted-manifest
+          path: tmp/mova53-formatted-manifest.json
+          retention-days: 7
