@@ -1,0 +1,60 @@
+name: SVR Morpho Quick Shock
+
+on:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - '.github/workflows/svr-morpho-quickshock.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Project observed ETH/BTC SVR shocks into listed Morpho Base positions
+        shell: bash
+        run: |
+          python3 - <<'PY' | tee svr-morpho-quickshock.log
+          import json, urllib.request, time
+          API='https://api.morpho.org/graphql'
+          SHOCK={'WETH':2511.126115973709/2516.72-1,'cbBTC':80839.26346899/80978.60738-1}
+          def gql(q):
+              req=urllib.request.Request(API,data=json.dumps({'query':q}).encode(),headers={'content-type':'application/json','user-agent':'profit-engine-svr-morpho-quickshock'})
+              with urllib.request.urlopen(req,timeout=30) as r: out=json.loads(r.read())
+              if out.get('errors'): raise RuntimeError(out['errors'])
+              return out['data']
+          markets=gql('''query { markets(first: 100, orderBy: SupplyAssetsUsd, orderDirection: Desc, where: { chainId_in: [8453], listed: true }) { items { marketId lltv loanAsset { address symbol decimals } collateralAsset { address symbol decimals } oracle { address } irmAddress state { borrowAssetsUsd collateralAssetsUsd } } } }''')['markets']['items']
+          scanned=0; relevant=0; api_crossed=[]; close=[]
+          for m in markets:
+              ca=m.get('collateralAsset') or {}; sym=ca.get('symbol')
+              if sym not in SHOCK: continue
+              relevant+=1; shock=SHOCK[sym]; lltv=int(m['lltv'])/1e18
+              mid=m['marketId']
+              q=f'''query {{ marketPositions(first: 200, orderBy: BorrowShares, orderDirection: Desc, where: {{ marketUniqueKey_in: ["{mid}"] }}) {{ items {{ user {{ address }} state {{ borrowShares borrowAssetsUsd collateral collateralUsd }} }} }} }}'''
+              try: ps=gql(q)['marketPositions']['items']
+              except Exception as e:
+                  print('MARKET_API_ERROR',mid,str(e)[:120]); continue
+              for p in ps:
+                  scanned+=1; s=p['state']; debt=float(s.get('borrowAssetsUsd') or 0); coll=float(s.get('collateralUsd') or 0)
+                  if debt<=0 or coll<=0: continue
+                  hf=coll*lltv/debt; projected=hf*(1+shock)
+                  row={'market':mid,'borrower':p['user']['address'],'loan':m['loanAsset']['symbol'],'collateral':sym,'debtUsd':debt,'collateralUsd':coll,'lltv':lltv,'hfApi':hf,'shockPct':shock*100,'projectedHfApi':projected,'oracle':m['oracle']['address'],'loanAsset':m['loanAsset']['address'],'collateralAsset':ca['address'],'irm':m['irmAddress'],'lltvRaw':m['lltv']}
+                  if hf>=1 and projected<1: api_crossed.append(row)
+                  if projected<1.005: close.append(row)
+              time.sleep(.02)
+          api_crossed.sort(key=lambda x:(x['projectedHfApi'],-x['debtUsd']))
+          close.sort(key=lambda x:(x['projectedHfApi'],-x['debtUsd']))
+          print('MORPHO_SVR_SUMMARY',json.dumps({'markets':len(markets),'relevantMarkets':relevant,'positionsScanned':scanned,'apiCrossed':len(api_crossed),'nearAfter':len(close),'ethShockPct':SHOCK['WETH']*100,'btcShockPct':SHOCK['cbBTC']*100},separators=(',',':')))
+          for x in api_crossed[:40]: print('API_CROSSED',json.dumps(x,separators=(',',':')))
+          for x in close[:40]: print('API_NEAR_AFTER',json.dumps(x,separators=(',',':')))
+          PY
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: svr-morpho-quickshock-evidence
+          path: svr-morpho-quickshock.log
+          retention-days: 30
