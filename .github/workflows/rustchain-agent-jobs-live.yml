@@ -18,9 +18,28 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --max-time 20 \
-            https://rustchain.org/agent/jobs \
-            -o /tmp/agent_jobs.json
+          OUT=/tmp/agent_jobs.json
+          FOUND=0
+
+          echo 'Trying canonical rustchain.org endpoint...'
+          code=$(curl --silent --show-error --max-time 20 -o "$OUT" -w '%{http_code}' \
+            'https://rustchain.org/agent/jobs?status=open&limit=100' || true)
+          echo "CANONICAL_HTTP=$code"
+          if [ "$code" = "200" ]; then FOUND=1; fi
+
+          if [ "$FOUND" = "0" ]; then
+            echo 'Trying current node IP published by upstream onboard/index.js (read-only fallback)...'
+            code=$(curl --insecure --silent --show-error --max-time 20 -o "$OUT" -w '%{http_code}' \
+              'https://50.28.86.131/agent/jobs?status=open&limit=100' || true)
+            echo "NODE_IP_HTTP=$code"
+            if [ "$code" = "200" ]; then FOUND=1; fi
+          fi
+
+          if [ "$FOUND" = "0" ]; then
+            echo 'AGENT_JOBS_ENDPOINT_UNAVAILABLE=1'
+            exit 0
+          fi
+
           python - <<'PY'
           import json
           from pathlib import Path
@@ -28,16 +47,16 @@ jobs:
           data = json.loads(Path('/tmp/agent_jobs.json').read_text())
           jobs = data.get('jobs', data if isinstance(data, list) else [])
           if not isinstance(jobs, list):
-              print(json.dumps(data, indent=2)[:12000])
+              print('UNEXPECTED_RESPONSE=' + json.dumps(data, ensure_ascii=False)[:12000])
               raise SystemExit(0)
 
-          open_jobs = [j for j in jobs if str(j.get('status', '')).lower() == 'open']
-          open_jobs.sort(key=lambda j: float(j.get('reward_rtc') or 0), reverse=True)
+          open_jobs = [j for j in jobs if str(j.get('status', 'open')).lower() == 'open']
+          open_jobs.sort(key=lambda j: float(j.get('reward_rtc') or j.get('reward') or 0), reverse=True)
           print(f'OPEN_JOB_COUNT={len(open_jobs)}')
           for j in open_jobs[:50]:
               keep = {k: j.get(k) for k in (
-                  'id','job_id','title','description','category','reward_rtc',
-                  'status','tags','expires_at','poster_wallet','created_at'
+                  'id','job_id','title','description','category','reward_rtc','reward',
+                  'status','tags','expires_at','poster_wallet','created_at','worker_wallet'
               ) if k in j}
               print('JOB=' + json.dumps(keep, ensure_ascii=False, sort_keys=True))
           PY
