@@ -128,32 +128,77 @@ async def enrich_base_svr(result, summary):
 async def run(seconds: int, out_path: str):
     deadline=time.monotonic()+seconds
     count=base=base_svr=0
+    connections=reconnects=0
+    last_stream_error=None
+
     with open(out_path,"w",encoding="utf-8") as f:
-        async with websockets.connect(WS_URL,open_timeout=15,ping_interval=20,ping_timeout=20,max_size=8*1024*1024) as ws:
-            req={"jsonrpc":"2.0","id":1,"method":"solver_subscribe","params":["userOperations"]}
-            await ws.send(json.dumps(req))
-            ack_obj=json.loads(await asyncio.wait_for(ws.recv(),timeout=15))
-            print("SUBSCRIBE_ACK",json.dumps(ack_obj,separators=(",",":")))
-            f.write(json.dumps({"type":"subscribe_ack","data":ack_obj})+"\n"); f.flush()
-            while time.monotonic()<deadline:
-                timeout=min(15.0,max(0.1,deadline-time.monotonic()))
-                try: raw=await asyncio.wait_for(ws.recv(),timeout=timeout)
-                except asyncio.TimeoutError: continue
-                now=time.time()
-                try: msg=json.loads(raw)
-                except Exception:
-                    f.write(json.dumps({"ts":now,"type":"non_json","raw":str(raw)[:10000]})+"\n"); continue
-                params=msg.get("params") if isinstance(msg,dict) else None
-                result=params.get("result") if isinstance(params,dict) else None
-                if result is None and isinstance(msg,dict): result=msg.get("result")
-                s=summarize(result)
-                s=await enrich_base_svr(result,s)
-                count+=1; base+=int(bool(s.get("is_base"))); base_svr+=int(bool(s.get("is_base_svr")))
-                f.write(json.dumps({"ts":now,"summary":s,"raw":msg},separators=(",",":"))+"\n"); f.flush()
-                print("AUCTION",json.dumps(s,separators=(",",":")))
-                if s.get("is_base_svr") and s.get("pending_move_bps") is not None:
-                    print("BASE_PRICE_SIGNAL",json.dumps({k:s.get(k) for k in ("auction_id","feed","current_price","pending_price","pending_move_bps","aggregator")},separators=(",",":")))
-    summary={"seconds":seconds,"notifications":count,"base":base,"base_svr":base_svr}
+        while time.monotonic() < deadline:
+            try:
+                async with websockets.connect(
+                    WS_URL,
+                    open_timeout=15,
+                    ping_interval=20,
+                    ping_timeout=20,
+                    max_size=8*1024*1024,
+                ) as ws:
+                    connections += 1
+                    req={"jsonrpc":"2.0","id":1,"method":"solver_subscribe","params":["userOperations"]}
+                    await ws.send(json.dumps(req))
+                    ack_obj=json.loads(await asyncio.wait_for(ws.recv(),timeout=15))
+                    print("SUBSCRIBE_ACK",json.dumps(ack_obj,separators=(",",":")))
+                    f.write(json.dumps({"type":"subscribe_ack","connection":connections,"data":ack_obj})+"\n"); f.flush()
+
+                    while time.monotonic()<deadline:
+                        timeout=min(15.0,max(0.1,deadline-time.monotonic()))
+                        try:
+                            raw=await asyncio.wait_for(ws.recv(),timeout=timeout)
+                        except asyncio.TimeoutError:
+                            continue
+
+                        now=time.time()
+                        try:
+                            msg=json.loads(raw)
+                        except Exception:
+                            f.write(json.dumps({"ts":now,"type":"non_json","raw":str(raw)[:10000]})+"\n"); f.flush()
+                            continue
+
+                        params=msg.get("params") if isinstance(msg,dict) else None
+                        result=params.get("result") if isinstance(params,dict) else None
+                        if result is None and isinstance(msg,dict): result=msg.get("result")
+                        s=summarize(result)
+                        s=await enrich_base_svr(result,s)
+                        count+=1; base+=int(bool(s.get("is_base"))); base_svr+=int(bool(s.get("is_base_svr")))
+                        f.write(json.dumps({"ts":now,"summary":s,"raw":msg},separators=(",",":"))+"\n"); f.flush()
+                        print("AUCTION",json.dumps(s,separators=(",",":")))
+                        if s.get("is_base_svr") and s.get("pending_move_bps") is not None:
+                            print("BASE_PRICE_SIGNAL",json.dumps({k:s.get(k) for k in ("auction_id","feed","current_price","pending_price","pending_move_bps","aggregator")},separators=(",",":")))
+
+            except (websockets.exceptions.ConnectionClosed, OSError, asyncio.TimeoutError) as exc:
+                reconnects += 1
+                last_stream_error=f"{type(exc).__name__}: {exc}"[:240]
+                remaining=max(0.0,deadline-time.monotonic())
+                event={
+                    "ts":time.time(),
+                    "type":"stream_reconnect",
+                    "reconnect":reconnects,
+                    "error":last_stream_error,
+                    "remaining_seconds":round(remaining,3),
+                }
+                print("STREAM_RECONNECT",json.dumps(event,separators=(",",":")))
+                f.write(json.dumps(event,separators=(",",":"))+"\n"); f.flush()
+                if remaining <= 0:
+                    break
+                await asyncio.sleep(min(2.0,remaining))
+
+    summary={
+        "seconds":seconds,
+        "notifications":count,
+        "base":base,
+        "base_svr":base_svr,
+        "connections":connections,
+        "reconnects":reconnects,
+        "last_stream_error":last_stream_error,
+    }
     print("MONITOR_SUMMARY",json.dumps(summary,separators=(",",":")))
     return summary
 
