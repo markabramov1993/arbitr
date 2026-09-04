@@ -1,0 +1,100 @@
+name: Validate tscircuit autorouting #92 fix
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'earn/tscircuit-autorouting-92/**'
+      - '.github/workflows/tscircuit-autorouting-92-validate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout evidence repo
+        uses: actions/checkout@v4
+
+      - name: Checkout upstream autorouting
+        uses: actions/checkout@v4
+        with:
+          repository: tscircuit/autorouting
+          path: target
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install upstream dependencies
+        working-directory: target
+        run: bun install --frozen-lockfile
+
+      - name: Add regression test
+        run: cp earn/tscircuit-autorouting-92/wild-jump-regression.test.ts target/algos/multi-layer-ijump/tests/wild-jump-regression.test.ts
+
+      - name: Prove regression fails on upstream main
+        shell: bash
+        run: |
+          set +e
+          cd target
+          bun test algos/multi-layer-ijump/tests/wild-jump-regression.test.ts 2>&1 | tee ../baseline-regression.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo 'Regression unexpectedly passes on unpatched upstream; refusing to claim a fix.'
+            exit 1
+          fi
+          echo 'BASELINE_REGRESSION_REPRODUCED=true'
+
+      - name: Apply minimal fix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('target/algos/multi-layer-ijump/MultilayerIjump.ts')
+          s = p.read_text()
+          old = '''        if (travelDir.wallDistance === Infinity) {
+            travelDirs3.push({
+              ...travelDir,
+              travelDistance: goalDistAlongTravelDir,
+              enterMarginCost: 0,
+              travelMarginCostFactor: 1,
+            })
+          } else if (travelDir.wallDistance > this.largestMargin) {'''
+          new = '''        if (
+            travelDir.wallDistance !== Infinity &&
+            travelDir.wallDistance > this.largestMargin
+          ) {'''
+          if old not in s:
+              raise SystemExit('Expected upstream block not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          cd target
+          git diff -- algos/multi-layer-ijump/MultilayerIjump.ts algos/multi-layer-ijump/tests/wild-jump-regression.test.ts | tee ../autorouting-92.patch
+
+      - name: Regression passes after fix
+        working-directory: target
+        run: bun test algos/multi-layer-ijump/tests/wild-jump-regression.test.ts
+
+      - name: Existing multilayer tests pass
+        working-directory: target
+        run: bun test algos/multi-layer-ijump/tests
+
+      - name: Format check changed source
+        working-directory: target
+        run: bunx biome format algos/multi-layer-ijump/MultilayerIjump.ts algos/multi-layer-ijump/tests/wild-jump-regression.test.ts
+
+      - name: Upload proof and patch
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tscircuit-autorouting-92-proof
+          path: |
+            baseline-regression.log
+            autorouting-92.patch
+          retention-days: 30
