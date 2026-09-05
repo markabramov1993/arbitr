@@ -54,12 +54,16 @@ jobs:
           git config --global --unset-all url."https://github.com/".insteadOf || true
           git config --global --add url."https://github.com/".insteadOf "git@github.com:"
           git config --global --add url."https://github.com/".insteadOf "ssh://git@github.com/"
-          echo 'Configured GitHub URL rewrites:'
-          git config --global --get-all url."https://github.com/".insteadOf
 
-      - name: Install Origin dependencies
+      - name: Install Origin Solidity and Node dependencies
         working-directory: origin-dollar/contracts
-        run: pnpm install --frozen-lockfile
+        run: |
+          # Use Origin's own bootstrap: Soldeer-managed dependencies plus the
+          # Chainlink CCIP tgz that Soldeer cannot extract.
+          ./install-deps.sh
+          pnpm install --frozen-lockfile
+          test -f dependencies/@openzeppelin-contracts-4.4.2/contracts/token/ERC20/IERC20.sol
+          test -f dependencies/@chainlink-contracts-ccip-1.2.1/package/src/v0.8/ccip/libraries/Client.sol
 
       - name: Run upstream Slither profile
         id: slither
@@ -92,3 +96,17 @@ jobs:
             origin-slither.log
           retention-days: 14
           if-no-files-found: warn
+
+      - name: Require real Slither completion
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ steps.slither.outcome }}" != "success" ]; then
+            echo 'SECURITY_SCAN_HEALTH=FAIL Slither did not complete successfully'
+            exit 1
+          fi
+          if ! grep -Eq 'analyzed|contracts? analyzed|INFO:Slither|INFO:Detectors' origin-slither.log; then
+            echo 'SECURITY_SCAN_HEALTH=FAIL no Slither completion evidence'
+            exit 1
+          fi
+          echo 'SECURITY_SCAN_HEALTH=OK'
