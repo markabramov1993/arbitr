@@ -39,6 +39,9 @@ https://github.com/markabramov1993/arbitr
 Draft review PR:
 https://github.com/markabramov1993/arbitr/pull/4
 
+Official Mermail companion proposal / maintainer-feedback issue:
+https://github.com/Nudgen-Marketing/mermail-skills/issues/173
+
 Submission branch:
 https://github.com/markabramov1993/arbitr/tree/earn/superteam-mermail-bounty-ops/earn/superteam-mermail-bounty-ops
 
@@ -77,6 +80,10 @@ The validator checks the public Mermail authoring constraints and submission-spe
 - seven machine-readable happy-path, duplicate, prompt-injection, external-effect and payment-state scenarios.
 
 Latest validation run on the current submission branch: **PASS**.
+
+## Official ecosystem feedback path
+
+Following Mermail's public companion-skill authoring guidance, the skill is now also surfaced in the official Mermail repository as issue **Nudgen-Marketing/mermail-skills#173**. The issue asks maintainers to review the worker-side positioning and any Mermail-specific tool/security details before the live demo. No maintainer endorsement is claimed unless they actually respond.
 
 ## Demo video
 
@@ -140,6 +147,8 @@ This makes the skill particularly useful for autonomous agents whose next action
 - [x] Machine-readable validation scenarios
 - [x] Self-contained package validator
 - [x] GitHub Actions validation passing
+- [x] Official Mermail companion proposal opened (#173)
+- [ ] Maintainer feedback incorporated (if/when received)
 - [ ] Live Mermail MCP/OAuth test
 - [ ] Video recording URL
 - [ ] Submit through authenticated Superteam profile
