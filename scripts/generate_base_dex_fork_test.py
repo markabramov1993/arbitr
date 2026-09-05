@@ -2,7 +2,9 @@
 """Generate a real-swap Foundry search from positive Base DEX spot edges.
 
 The generated test:
-- creates a fresh latest Base fork for every route/size attempt;
+- creates ONE fresh latest Base fork per test run;
+- snapshots/reverts that same fork around every route/size attempt so every
+  candidate sees identical chain state without 24 expensive fork creations;
 - funds only the local fork test contract with USDC via Foundry deal();
 - executes the actual Uniswap V3 / Aerodrome Slipstream V3 router calls;
 - measures final USDC and emits only fork-surviving positive routes.
@@ -135,18 +137,23 @@ contract GeneratedBaseDexArbTest is Test {{
         Candidate[] memory cs = candidates();
         uint256[] memory xs = sizes();
         uint256 positives;
+        uint256 forkId = vm.createSelectFork(RPC);
+        emit log_named_uint("FORK_ID", forkId);
+        emit log_named_uint("FORK_BLOCK", block.number);
         emit log_named_uint("EDGE_COUNT", cs.length);
         emit log_named_uint("SIZE_COUNT", xs.length);
+
         for (uint256 i; i < cs.length; i++) {{
             for (uint256 j; j < xs.length; j++) {{
+                uint256 snap = vm.snapshotState();
                 if (_attempt(cs[i], i, xs[j])) positives++;
+                require(vm.revertToState(snap), "snapshot revert failed");
             }}
         }}
         emit log_named_uint("FORK_PROFITABLE_COUNT", positives);
     }}
 
     function _attempt(Candidate memory c, uint256 idx, uint256 amountIn) internal returns (bool) {{
-        vm.createSelectFork(RPC);
         deal(USDC, address(this), amountIn);
         uint256 start = IERC20Dex(USDC).balanceOf(address(this));
 
