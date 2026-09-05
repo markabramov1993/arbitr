@@ -46,6 +46,7 @@ contract CbBtcArbForkTest {
     address constant CBBTC = 0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf;
 
     address constant UNI_ROUTER  = 0x2626664c2603336E57B271c5C0b26F421741e481;
+    // Slipstream V3 router paired with the newest Base CLFactory.
     address constant AERO_ROUTER = 0x698Cb2b6dd822994581fEa6eA4Fc755d1363A92F;
 
     address constant FUNDING_HOLDER = 0xb4CB800910B228ED3d0834cF79D697127BBB00e5;
@@ -54,18 +55,23 @@ contract CbBtcArbForkTest {
     event log_named_int(string key, int256 val);
 
     function setUp() public {
-        VM.createSelectFork("https://base-mainnet.g.alchemy.com/public");
+        // Prefer Base's public RPC here; the previous Alchemy-public run hit 429s.
+        VM.createSelectFork("https://mainnet.base.org");
     }
 
-    function testCbBtc100() public { _roundTrip(100e6); }
-    function testCbBtc500() public { _roundTrip(500e6); }
-    function testCbBtc1000() public { _roundTrip(1_000e6); }
-    function testCbBtc2500() public { _roundTrip(2_500e6); }
-    function testCbBtc5000() public { _roundTrip(5_000e6); }
-    function testCbBtc10000() public { _roundTrip(10_000e6); }
-    function testCbBtc25000() public { _roundTrip(25_000e6); }
+    // The live spot shortlist currently selects Uni 1 bp -> Aero tick spacing 1.
+    // Sweep small sizes first because a few-bps edge disappears quickly with impact.
+    function testCbBtc25() public { _roundTrip(25e6, 1); }
+    function testCbBtc50() public { _roundTrip(50e6, 1); }
+    function testCbBtc100() public { _roundTrip(100e6, 1); }
+    function testCbBtc250() public { _roundTrip(250e6, 1); }
+    function testCbBtc500() public { _roundTrip(500e6, 1); }
+    function testCbBtc1000() public { _roundTrip(1_000e6, 1); }
 
-    function _roundTrip(uint256 amountIn) internal {
+    // Control route retained to expose how much worse the previous spacing-50 leg is.
+    function testCbBtc100Spacing50Control() public { _roundTrip(100e6, 50); }
+
+    function _roundTrip(uint256 amountIn, int24 aeroSpacing) internal {
         VM.prank(FUNDING_HOLDER);
         require(IERC20CbBtc(USDC).transfer(address(this), amountIn), "fund");
 
@@ -87,7 +93,7 @@ contract CbBtcArbForkTest {
             IAeroRouterCbBtc.ExactInputSingleParams({
                 tokenIn: CBBTC,
                 tokenOut: USDC,
-                tickSpacing: 50,
+                tickSpacing: aeroSpacing,
                 recipient: address(this),
                 deadline: block.timestamp,
                 amountIn: cbBtcOut,
@@ -96,6 +102,7 @@ contract CbBtcArbForkTest {
             })
         );
 
+        emit log_named_uint("aero_tick_spacing", uint256(uint24(aeroSpacing)));
         emit log_named_uint("amountIn_USDC_6dec", amountIn);
         emit log_named_uint("cbBTC_out_8dec", cbBtcOut);
         emit log_named_uint("final_USDC_6dec", finalUsdc);
