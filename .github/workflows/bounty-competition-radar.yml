@@ -41,7 +41,7 @@ jobs:
               'Authorization': f'Bearer {TOKEN}',
               'Accept': 'application/vnd.github+json',
               'X-GitHub-Api-Version': '2022-11-28',
-              'User-Agent': 'profit-engine-bounty-competition-radar/1.1',
+              'User-Agent': 'profit-engine-bounty-competition-radar/1.2',
           }
 
           def api(url):
@@ -87,7 +87,14 @@ jobs:
               ]
               return any(re.search(p, text, re.I) for p in patterns)
 
+          repo_cache = {}
+          def repo_meta(repo):
+              if repo not in repo_cache:
+                  repo_cache[repo] = api('https://api.github.com/repos/' + repo)
+              return repo_cache[repo]
+
           rows = []
+          rejected = []
           for item in search.get('items', []):
               repo = repo_from_api_url(item.get('repository_url', ''))
               if not repo or repo.lower().endswith('/bountyscout'):
@@ -98,8 +105,39 @@ jobs:
                   continue
 
               number = int(item['number'])
+              labels = [str(x.get('name', '')) for x in (item.get('labels') or []) if isinstance(x, dict)]
+              label_text = ' '.join(labels).lower()
+              if 'rewarded' in label_text or 'paid' in label_text:
+                  rejected.append({'repo': repo, 'issue': number, 'reason': 'rewarded/paid label'})
+                  continue
+
+              try:
+                  if bool(repo_meta(repo).get('archived')):
+                      rejected.append({'repo': repo, 'issue': number, 'reason': 'repository archived'})
+                      continue
+              except Exception as e:
+                  print('REPO_META_ERROR', repo, repr(e))
+
               assignees = len(item.get('assignees') or [])
               comments = int(item.get('comments') or 0)
+              awarded = False
+              active_claim = False
+              if comments:
+                  try:
+                      issue_comments = api(item['comments_url'] + '?per_page=100')
+                      for c in issue_comments:
+                          body = c.get('body') or ''
+                          login = ((c.get('user') or {}).get('login') or '').lower()
+                          if ('has been awarded' in body.lower() or 'bounty has been awarded' in body.lower()) and ('algora' in login or '$' in body):
+                              awarded = True
+                          if re.search(r'(?im)^\s*/attempt\b', body) or 'submitted a pull request that claims the bounty' in body.lower():
+                              active_claim = True
+                  except Exception as e:
+                      print('COMMENT_SCAN_ERROR', repo, number, repr(e))
+
+              if awarded:
+                  rejected.append({'repo': repo, 'issue': number, 'reason': 'award/payout comment already present'})
+                  continue
 
               pr_q = f'repo:{repo} is:pr is:open "#{number}"'
               pr_url = 'https://api.github.com/search/issues?' + urllib.parse.urlencode({
@@ -125,9 +163,9 @@ jobs:
                       })
 
               open_prs = len(matching_prs)
-              denom = 1 + (open_prs * 3) + (assignees * 3) + min(comments, 20) * 0.20
+              denom = 1 + (open_prs * 3) + (assignees * 3) + (3 if active_claim else 0) + min(comments, 20) * 0.20
               score = reward / denom
-              lane = 'CLEAR' if open_prs == 0 and assignees == 0 and comments <= 1 else 'CONTESTED'
+              lane = 'CLEAR' if open_prs == 0 and assignees == 0 and comments <= 1 and not active_claim else 'CONTESTED'
 
               rows.append({
                   'repo': repo,
@@ -137,6 +175,7 @@ jobs:
                   'reward_nominal': reward,
                   'assignees': assignees,
                   'comments': comments,
+                  'active_claim_signal': active_claim,
                   'matching_open_prs': matching_prs,
                   'competition': lane,
                   'score': round(score, 2),
@@ -153,27 +192,31 @@ jobs:
               'generated_at': dt.datetime.now(dt.timezone.utc).isoformat(),
               'query': q,
               'candidates': rows,
+              'rejected': rejected,
           }
           Path('bounty-competition-radar.json').write_text(
               json.dumps(out, ensure_ascii=False, indent=2), encoding='utf-8'
           )
 
           md = ['# Bounty Competition Radar', '', f'Generated: {out["generated_at"]}', '']
-          md += ['| Lane | Reward | Score | Issue | Assignees | Comments | Open PRs |',
-                 '|---|---:|---:|---|---:|---:|---:|']
+          md += ['| Lane | Reward | Score | Issue | Assignees | Comments | Claim | Open PRs |',
+                 '|---|---:|---:|---|---:|---:|---|---:|']
           for r in rows[:30]:
               md.append(
                   f'| {r["competition"]} | ${r["reward_nominal"]:,.0f} | {r["score"]:.2f} | '
                   f'[{r["repo"]}#{r["issue"]}]({r["url"]}) | {r["assignees"]} | '
-                  f'{r["comments"]} | {len(r["matching_open_prs"])} |'
+                  f'{r["comments"]} | {"yes" if r["active_claim_signal"] else "no"} | {len(r["matching_open_prs"])} |'
               )
           Path('bounty-competition-radar.md').write_text('\n'.join(md) + '\n', encoding='utf-8')
 
           clear = [r for r in rows if r['competition'] == 'CLEAR']
           print('CANDIDATE_COUNT=', len(rows))
+          print('REJECTED_COUNT=', len(rejected))
           print('CLEAR_LANE_COUNT=', len(clear))
           for r in clear[:15]:
               print('CLEAR=' + json.dumps(r, ensure_ascii=False, sort_keys=True))
+          for r in rejected[:15]:
+              print('REJECTED=' + json.dumps(r, ensure_ascii=False, sort_keys=True))
 
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as f:
               f.write('\n'.join(md) + '\n')
@@ -188,5 +231,3 @@ jobs:
             bounty-competition-radar.json
             bounty-competition-radar.md
           retention-days: 7
-
-# FLASH manual competition-aware refresh: 2026-09-04T21:02Z
