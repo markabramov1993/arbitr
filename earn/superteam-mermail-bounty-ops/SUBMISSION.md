@@ -2,15 +2,15 @@
 
 ## Submission title
 
-**Mermail Bounty Ops — safe paid-task inbox operations for AI agents**
+**Mermail Bounty Ops — safe worker-side paid-task operations for AI agents**
 
 ## Short description
 
-Mermail Bounty Ops is a reusable community Mermail Agent Skill for bounty hunters, freelance operators, and AI agents managing paid-task email. It safely finds opportunities and reviewer replies, prevents duplicate claims, drafts submissions/follow-ups, resists prompt injection in email, and keeps advertised, accepted, and actually paid rewards as separate states.
+Mermail Bounty Ops is a reusable community Mermail Agent Skill for bounty hunters, freelancers, and AI agents managing their own paid-task pipeline. It safely finds opportunities and reviewer replies, prevents duplicate claims, drafts submissions/follow-ups, resists prompt injection in email, and keeps advertised, accepted, and actually paid rewards as separate states.
 
 ## Why this skill
 
-Most bounty automation focuses on finding more opportunities. This skill focuses on the operational layer where money is commonly lost or misreported:
+Most bounty automation focuses on finding more opportunities. This skill focuses on the worker-side operational layer where money is commonly lost or misreported:
 
 - duplicate claims and duplicate follow-ups;
 - missing reviewer replies;
@@ -21,10 +21,23 @@ Most bounty automation focuses on finding more opportunities. This skill focuses
 
 The workflow is reusable across GitHub bounties, grants, contests, freelance tasks, and sponsor-paid work because the opportunity source is normalized through Mermail inbox operations.
 
+## Distinct from adjacent Mermail proposals
+
+The public Mermail repository contains adjacent proposals, so this submission intentionally defines a different side of the workflow:
+
+- `mermail-opportunity-gate` (#70) stops at a read-only eligibility decision. `mermail-bounty-ops` manages what happens after and around that decision: duplicate checks, claims/applications, reviewer replies, acceptance, and payout reconciliation.
+- `mermail-pact` (#136) is sponsor/operator-side paid-work contracting and settlement. `mermail-bounty-ops` is **worker-side**: it manages the worker's opportunities, submissions, reviews, and incoming reward evidence.
+- Mermail Freelance Deal Desk (#154) qualifies one inbound prospective client and prepares a quote/clarification/decline. `mermail-bounty-ops` is a multi-opportunity bounty/grant/contest operations queue, including already-submitted work and payment follow-up.
+
+The goal is not to claim a new Mermail tool domain. It is a reusable community workflow composed from existing documented Mermail inbox and composition capabilities.
+
 ## Public code
 
 Repository:
 https://github.com/markabramov1993/arbitr
+
+Draft review PR:
+https://github.com/markabramov1993/arbitr/pull/4
 
 Submission branch:
 https://github.com/markabramov1993/arbitr/tree/earn/superteam-mermail-bounty-ops/earn/superteam-mermail-bounty-ops
@@ -73,13 +86,16 @@ The skill follows Mermail's public Agent Skill authoring conventions:
 
 ## Demo differentiators
 
-**1. Duplicate protection**
+**1. Worker-side lifecycle**
+The skill follows one worker's opportunity from discovery/dedupe through submission, reviewer response, acceptance, and payment evidence rather than operating a sponsor's contest.
+
+**2. Duplicate protection**
 The agent checks existing sent mail before any new claim/application.
 
-**2. Security around economic email**
+**3. Security around economic email**
 Prompt injection, wallet instructions, verification links, and payment requests in email are contained as data rather than executed.
 
-**3. Honest reward accounting**
+**4. Honest reward accounting**
 Every opportunity is tracked as one of:
 - opportunity / nominal;
 - accepted / unpaid;
@@ -94,7 +110,9 @@ This makes the skill particularly useful for autonomous agents whose next action
 - [x] Tool contract
 - [x] Security reference
 - [x] Public GitHub branch
+- [x] Draft review PR
 - [x] Demo script
+- [x] Differentiation from adjacent public Mermail proposals
 - [ ] Live Mermail MCP/OAuth test
 - [ ] Video recording URL
 - [ ] Submit through authenticated Superteam profile
