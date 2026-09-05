@@ -1,0 +1,76 @@
+diff --git a/contracts/protocol/src/test.rs b/contracts/protocol/src/test.rs
+--- a/contracts/protocol/src/test.rs
++++ b/contracts/protocol/src/test.rs
+@@
+ #[test]
+ fn initializes_once_and_reads_config() {
+@@
+ }
++
++#[test]
++fn rejects_non_pinned_admin_and_stays_uninitialized() {
++    let env = test_env();
++    let pinned_admin = test_address(&env);
++    let other_admin = test_address(&env);
++    let treasury = test_address(&env);
++
++    let contract_id = env.register(ProtocolContract, (pinned_admin,));
++    let client = ProtocolContractClient::new(&env, &contract_id);
++
++    let result = client.try_initialize(&other_admin, &treasury, &100_u32);
++    assert_eq!(result, Err(Ok(Error::from_contract_error(3))));
++    assert!(!client.is_initialized());
++}
++
++#[test]
++#[should_panic = "Error(Contract, #3)"]
++fn non_pinned_protocol_admin_panics_with_typed_unauthorized() {
++    let env = test_env();
++    let pinned_admin = test_address(&env);
++    let other_admin = test_address(&env);
++    let treasury = test_address(&env);
++
++    let contract_id = env.register(ProtocolContract, (pinned_admin,));
++    let client = ProtocolContractClient::new(&env, &contract_id);
++    client.initialize(&other_admin, &treasury, &100_u32);
++}
+
+diff --git a/contracts/payments/src/test.rs b/contracts/payments/src/test.rs
+--- a/contracts/payments/src/test.rs
++++ b/contracts/payments/src/test.rs
+@@
+-use soroban_sdk::testutils::Ledger;
++use soroban_sdk::testutils::Ledger;
++use soroban_sdk::Error;
+@@
+ fn bootstrap() -> (soroban_sdk::Env, soroban_sdk::Address, PaymentsContractClient<'static>) {
+@@
+ }
++
++#[test]
++fn rejects_non_pinned_admin_and_stays_uninitialized() {
++    let env = test_env();
++    let pinned_admin = test_address(&env);
++    let other_admin = test_address(&env);
++    let treasury = test_address(&env);
++
++    let contract_id = env.register(PaymentsContract, (pinned_admin,));
++    let client = PaymentsContractClient::new(&env, &contract_id);
++
++    let result = client.try_initialize(&other_admin, &treasury, &50_u32);
++    assert_eq!(result, Err(Ok(Error::from_contract_error(3))));
++    assert!(!client.is_initialized());
++}
++
++#[test]
++#[should_panic = "Error(Contract, #3)"]
++fn non_pinned_payments_admin_panics_with_typed_unauthorized() {
++    let env = test_env();
++    let pinned_admin = test_address(&env);
++    let other_admin = test_address(&env);
++    let treasury = test_address(&env);
++
++    let contract_id = env.register(PaymentsContract, (pinned_admin,));
++    let client = PaymentsContractClient::new(&env, &contract_id);
++    client.initialize(&other_admin, &treasury, &50_u32);
++}
