@@ -51,15 +51,13 @@ jobs:
               if int(pool,16): active.append((s,pool))
           print('AERODROME_ACTIVE',active)
           amounts=[0.05,0.1,0.25,0.5,1,2,4,8,13.322412109739688]
-          # ABI helpers for Aerodrome quoteExactInput(bytes,uint256)
           sel=os.environ['SEL_AQ'][2:]
           def enc_bytes(raw):
               b=bytes.fromhex(raw); pad=(32-len(b)%32)%32; return u256(len(b))+b.hex()+'00'*pad
           for a in amounts:
               wei=int(a*1e18); best_u=(0,0); best_a=(0,0)
               for fee in (100,500,3000,10000):
-                  # QuoterV2 quoteExactInputSingle tuple: tokenIn,tokenOut,amountIn,fee,sqrtLimit
-                  sig='0xc6a5026a'  # cast sig quoteExactInputSingle((address,address,uint256,uint24,uint160))
+                  sig='0xc6a5026a'
                   data=sig+addr(wst)+addr(weth)+u256(wei)+u256(fee)+u256(0)
                   try:r=call(uq,data); out=int(r[2:66],16)
                   except Exception:continue
@@ -73,3 +71,5 @@ jobs:
               winner='AERODROME' if best_a[0]>best_u[0] else 'UNISWAP'
               print(json.dumps({'wstETH_in':a,'uniswap_weth':best_u[0]/1e18,'uniswap_fee':best_u[1],'aerodrome_weth':best_a[0]/1e18,'aerodrome_spacing':best_a[1],'winner':winner,'delta_weth':abs(best_a[0]-best_u[0])/1e18}))
           PY
+
+# FLASH fresh wstETH/WETH route compare: 2026-09-05T00:40Z
