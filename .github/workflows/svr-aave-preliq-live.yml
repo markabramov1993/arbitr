@@ -27,6 +27,34 @@ jobs:
         run: |
           set -o pipefail
           python3 scripts/svr_aave_preliq_live.py 2>&1 | tee svr-aave-preliq.log
+      - name: Summarize execution gate
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('svr-aave-preliq.log')
+          crossed=[]; summary=None; snapshot=None; index=None
+          if p.exists():
+              for line in p.read_text(encoding='utf-8',errors='replace').splitlines():
+                  for prefix,key in [('BORROW_INDEX ','index'),('SNAPSHOT ','snapshot'),('CROSSED ','crossed'),('PRELIQ_SUMMARY ','summary')]:
+                      if line.startswith(prefix):
+                          try: obj=json.loads(line[len(prefix):])
+                          except Exception: continue
+                          if key=='index': index=obj
+                          elif key=='snapshot': snapshot=obj
+                          elif key=='crossed': crossed.append(obj)
+                          else: summary=obj
+          print('SVR_BORROW_INDEX=',json.dumps(index,separators=(',',':')) if index else 'null')
+          print('SVR_SNAPSHOT=',json.dumps(snapshot,separators=(',',':')) if snapshot else 'null')
+          print('SVR_PRELIQ_SUMMARY=',json.dumps(summary,separators=(',',':')) if summary else 'null')
+          print('SVR_CROSSED=',len(crossed))
+          print('EXECUTION_GATE='+('OPEN' if crossed else 'CLOSED'))
+          if crossed:
+              crossed.sort(key=lambda x: float(x.get('projectedHF',999)))
+              print('SVR_BEST_CROSSED=',json.dumps(crossed[0],separators=(',',':')))
+          PY
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
