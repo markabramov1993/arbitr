@@ -54,6 +54,30 @@ https://github.com/markabramov1993/arbitr/blob/earn/superteam-mermail-bounty-ops
 Security reference:
 https://github.com/markabramov1993/arbitr/blob/earn/superteam-mermail-bounty-ops/earn/superteam-mermail-bounty-ops/mermail-bounty-ops/references/security.md
 
+Validation scenarios:
+https://github.com/markabramov1993/arbitr/blob/earn/superteam-mermail-bounty-ops/earn/superteam-mermail-bounty-ops/scenarios.json
+
+Self-contained validator:
+https://github.com/markabramov1993/arbitr/blob/earn/superteam-mermail-bounty-ops/earn/superteam-mermail-bounty-ops/mermail-bounty-ops/scripts/validate_skill.py
+
+## Automated validation evidence
+
+The repository includes a dedicated GitHub Actions workflow, `Mermail Bounty Ops Validate`, which runs the package validator on the submission branch/PR.
+
+The validator checks the public Mermail authoring constraints and submission-specific invariants, including:
+
+- allowed `SKILL.md` frontmatter and exact directory/name match;
+- `MERMAIL_API_KEY` OpenClaw metadata;
+- hosted Mermail MCP metadata in `agents/openai.yaml`;
+- `SKILL.md` line budget and required tool/security references;
+- no unresolved placeholder markers in core package docs;
+- untrusted-email, sender-authentication, bounded-read, OTP/magic-link and wallet/payment safety rules;
+- explicit approval for external effects;
+- exact `opportunity -> accepted -> paid` reward accounting;
+- seven machine-readable happy-path, duplicate, prompt-injection, external-effect and payment-state scenarios.
+
+Latest validation run on the current submission branch: **PASS**.
+
 ## Demo video
 
 **Pending live recording.**
@@ -113,6 +137,9 @@ This makes the skill particularly useful for autonomous agents whose next action
 - [x] Draft review PR
 - [x] Demo script
 - [x] Differentiation from adjacent public Mermail proposals
+- [x] Machine-readable validation scenarios
+- [x] Self-contained package validator
+- [x] GitHub Actions validation passing
 - [ ] Live Mermail MCP/OAuth test
 - [ ] Video recording URL
 - [ ] Submit through authenticated Superteam profile
