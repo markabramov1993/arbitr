@@ -81,3 +81,5 @@ jobs:
           import sys
           p,g,d=map(int,sys.argv[1:]); print(f'OWNER_PROFIT_WETH={p/1e18:.9f}'); print(f'QUOTED_GROSS_WETH={g/1e18:.9f}'); print(f'SIMULATED_DAYS_TO_ELIGIBILITY={d}'); print('END_TO_END_SELF_FUNDED=' + ('true' if p>0 else 'false'))
           PY
+
+# FLASH fresh self-funded Morpho E2E: 2026-09-05T00:42Z
