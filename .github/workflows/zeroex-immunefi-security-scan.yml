@@ -25,10 +25,10 @@ jobs:
           cd zeroex-settler
           git rev-parse HEAD | tee ../zeroex-upstream-sha.txt
 
-      - name: Install 0x-pinned Foundry
+      - name: Install current Foundry for Solidity 0.8.34
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: v1.5.1
+          version: stable
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -52,7 +52,7 @@ jobs:
 
       - name: Run Slither on production repository
         id: slither
-        if: steps.build.outcome == 'success'
+        if: always()
         working-directory: zeroex-settler
         continue-on-error: true
         run: |
@@ -84,3 +84,21 @@ jobs:
             zeroex-slither.log
           retention-days: 14
           if-no-files-found: warn
+
+      - name: Require real build and Slither completion
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ steps.build.outcome }}" != "success" ]; then
+            echo 'SECURITY_SCAN_HEALTH=FAIL forge build did not complete'
+            exit 1
+          fi
+          if [ "${{ steps.slither.outcome }}" != "success" ]; then
+            echo 'SECURITY_SCAN_HEALTH=FAIL Slither did not complete'
+            exit 1
+          fi
+          if ! grep -Eq 'analyzed|contracts? analyzed|INFO:Slither|INFO:Detectors' zeroex-slither.log; then
+            echo 'SECURITY_SCAN_HEALTH=FAIL no Slither completion evidence'
+            exit 1
+          fi
+          echo 'SECURITY_SCAN_HEALTH=OK'
