@@ -9,6 +9,7 @@ on:
 permissions:
   contents: read
 
+# Manual/live gate: API shortlist is never treated as executable until the latest Base fork accepts liquidation.
 jobs:
   scan:
     runs-on: ubuntu-latest
