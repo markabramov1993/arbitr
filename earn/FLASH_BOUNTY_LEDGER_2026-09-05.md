@@ -18,9 +18,25 @@ Purpose: generate small, real external rewards first; only cleared/received fund
 
 Fresh nominal pipeline added today: **$635**. Cleared cash added today: **$0 until acceptance/payment confirmation**.
 
+## Platform-backed work in progress — not included in the $635 completed nominal total
+
+### Superteam / Mermail — Build and Demo a Mermail Agent Skill
+
+- Advertised pool: **500 USDC** on Superteam Earn.
+- Public Mermail announcement: reusable Mermail Agent Skill + live video demo; deadline stated as **2026-09-23**.
+- Concept built: `mermail-bounty-ops`, a community/unofficial Mermail companion skill for safe bounty/freelance inbox operations.
+- Public branch: `earn/superteam-mermail-bounty-ops` in `markabramov1993/arbitr`.
+- Draft review PR: `markabramov1993/arbitr#4`.
+- Package currently contains 7 isolated files / 666 added lines: `SKILL.md`, OpenAI/MCP metadata, tool reference, security reference, README, live-demo script, and Superteam submission copy/checklist.
+- Code/docs phase: **ready**.
+- Live Mermail OAuth/MCP test: **blocked by disconnected interactive browser**.
+- Video demo: **script ready; live recording pending**.
+- Superteam submission: **not submitted yet**; authenticated profile/browser step pending.
+- Accounting rule: the 500 USDC is an opportunity only. Do **not** add it to earned, accepted, or paid totals until the corresponding evidence exists.
+
 ## Existing cash-bounty pipeline recovered from 2026-09-04 work
 
-- Mova Labs `mova-store` #91 — **$90**. Upstream PR #257 is open, mergeable, not merged. Current external failing status is Vercel authorization for the project team, not a code-review rejection.
+- Mova Labs `mova-store` #91 — **$90**. Upstream PR #257 is open, mergeable, not merged. Current external failing status is Vercel authorization for the project team, not a code-review rejection. Latest check on 2026-09-05 still shows no human review.
 - Mova Labs `mova-store` #53 — **$45**. Patch/follow-up already sent to Mova Labs.
 - Claude Builders bounty #1 — **$50**. CHANGELOG task completed; `/opire try` path was blocked by GitHub integration permissions; fallback sent by email.
 - Lilly Protocol `agentlily-runtime` #253 — **$50**. Now promoted from standalone fallback to an actual fork branch/commit (see fresh table).
@@ -48,16 +64,17 @@ Known RTC amount with explicit numeric rewards in recovered mail: **154 RTC nomi
 ## Superteam / verified-platform track
 
 - ProofRoute / Germany Ideathon package was emailed to Superteam Germany on 2026-09-04.
-- Current Superteam public listings verified on 2026-09-05 include: ZNS Solana Creator Challenge (500 USDC), Terminal 3 trusted-agent docs (290 USDC), Manual QA Tester — Sana.run (50–250 USDC), Mermail Agent Skill (500 USDC), plus other current content/dev bounties.
-- Superteam's current agent interface explicitly supports agent registration, API-key based listing discovery/submission, and a human claim-code payout flow.
-- Priority: use Superteam as a platform-backed payout route, but authenticated POST registration/submission currently requires a working interactive/browser connection. Opera Browser Connector is installed but not currently connected to ChatGPT.
+- Current Superteam public listings verified on 2026-09-05 include Mermail Agent Skill (500 USDC), Terminal 3 trusted-agent docs (290 USDC), ZNS Solana Creator Challenge (500 USDC), and other current content/dev bounties.
+- Treat individual listing status as dynamic and re-check before starting; previously surfaced Sana.run and some regional opportunities showed inconsistent/stale indexing and are not current priority targets without a fresh exact-listing verification.
+- Priority: platform-backed opportunities with a reproducible deliverable and clear submission path.
 
 ## Current blockers
 
 1. GitHub App can write to the user's repos/forks but gets `403 Resource not accessible by integration` on several upstream issue/PR writes.
-2. Opera Browser Connector reports browser not connected; Remote Desktop Commander has no connected device. This blocks authenticated web registrations/forms and Superteam agent registration that cannot be completed through Gmail/GitHub.
-3. Local/container internet is unavailable, so repository tests cannot be executed locally in this session; test-only bounty branches are written against the current source/API and remain pending maintainer/CI verification.
-4. Do not treat scraped/mirrored issue amounts as payout proof. Prefer platform-backed bounties, maintainer-confirmed rewards, or merged/accepted work.
+2. Opera Browser Connector still reports: `Browser not connected. Make sure to enable Allow AI connection ... and sign in with your Opera account.` This blocks authenticated Mermail/Superteam web/OAuth steps that cannot be completed through Gmail/GitHub.
+3. Remote Desktop Commander has no connected device.
+4. Local/container internet is unavailable, so repository tests cannot be executed locally in this session; test-only bounty branches are written against the current source/API and remain pending maintainer/CI verification.
+5. Do not treat scraped/mirrored issue amounts as payout proof. Prefer platform-backed bounties, maintainer-confirmed rewards, or merged/accepted work.
 
 ## Operating rules
 
