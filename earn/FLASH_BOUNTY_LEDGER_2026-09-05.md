@@ -10,8 +10,13 @@ Purpose: generate small, real external rewards first; only cleared/received fund
 | Lilly-Protocol/lily-contracts #323 — ERRORS.md current error/raise-site sync | $90 | Complete; patch + PR notes in `earn/lily-contracts-323/` | Emailed to Lily + GrantFox; upstream GitHub writes blocked by integration 403 |
 | Lilly-Protocol/lily-contracts #321 — pinned-admin negative tests | $90 | Complete patch + PR notes in `earn/lily-contracts-321/` | Emailed to Lily + GrantFox; upstream GitHub writes blocked by integration 403 |
 | Lilly-Protocol/agentlily-runtime #253 — ISO-safe property-test dates | $50 | Commit `1d68f61...` on fork branch `fix/issue-253-safe-property-dates` | Upstream PR creation returned 403; updated submission sent by email |
+| Lilly-Protocol/agentlily-runtime #247 — runtime event catalog/docs | $45 | Commit `c490d26...` on `docs/issue-247-runtime-events` | Branch ready; combined submission sent to Lily + GrantFox |
+| Lilly-Protocol/agentlily-runtime #248 — JsonFileMemoryStore/durable-memory docs | $90 | Commit `7e84941...` on `docs/issue-248-durable-memory` | Branch ready; combined submission sent to Lily + GrantFox |
+| Lilly-Protocol/agentlily-runtime #243 — ToolRegistry lifecycle tests | $55 | Commit `980d8f7...` on `test/issue-243-tool-registry-lifecycle` | Branch ready; upstream GitHub write still blocked |
+| Lilly-Protocol/agentlily-runtime #242 — state-store eviction/lifecycle tests | $40 | Commit `a939f5d...` on `test/issue-242-state-store-lifecycle` | Branch ready; upstream GitHub write still blocked |
+| Lilly-Protocol/agentlily-runtime #241 — AgentInstanceManager FIFO eviction tests | $95 | Commit `cd2505f...` on `test/issue-241-agent-manager-eviction` | Branch ready; upstream GitHub write still blocked |
 
-Fresh nominal pipeline added today: **$310**. Cleared cash added today: **$0 until acceptance/payment confirmation**.
+Fresh nominal pipeline added today: **$635**. Cleared cash added today: **$0 until acceptance/payment confirmation**.
 
 ## Existing cash-bounty pipeline recovered from 2026-09-04 work
 
@@ -43,14 +48,16 @@ Known RTC amount with explicit numeric rewards in recovered mail: **154 RTC nomi
 ## Superteam / verified-platform track
 
 - ProofRoute / Germany Ideathon package was emailed to Superteam Germany on 2026-09-04.
-- Current Superteam public listings recovered by radar/web include live USDC/USDG opportunities such as ZNS Solana Creator Challenge (500 USDC), Steve Agent Arena (500 USDC), Terminal 3 trusted-agent docs (290 USDC), Manual QA Tester — Sana.run (50–250 USDC), and other current content/dev bounties.
-- Priority: use Superteam as a verified payout platform, but authenticated signup/submission currently requires the interactive browser connection. Opera Browser Connector is installed but not currently connected to ChatGPT.
+- Current Superteam public listings verified on 2026-09-05 include: ZNS Solana Creator Challenge (500 USDC), Terminal 3 trusted-agent docs (290 USDC), Manual QA Tester — Sana.run (50–250 USDC), Mermail Agent Skill (500 USDC), plus other current content/dev bounties.
+- Superteam's current agent interface explicitly supports agent registration, API-key based listing discovery/submission, and a human claim-code payout flow.
+- Priority: use Superteam as a platform-backed payout route, but authenticated POST registration/submission currently requires a working interactive/browser connection. Opera Browser Connector is installed but not currently connected to ChatGPT.
 
 ## Current blockers
 
 1. GitHub App can write to the user's repos/forks but gets `403 Resource not accessible by integration` on several upstream issue/PR writes.
-2. Opera Browser Connector reports browser not connected; Remote Desktop Commander has no connected device. This blocks authenticated web registrations/forms that cannot be completed through Gmail/GitHub.
-3. Do not treat scraped/mirrored issue amounts as payout proof. Prefer platform-backed bounties, maintainer-confirmed rewards, or merged/accepted work.
+2. Opera Browser Connector reports browser not connected; Remote Desktop Commander has no connected device. This blocks authenticated web registrations/forms and Superteam agent registration that cannot be completed through Gmail/GitHub.
+3. Local/container internet is unavailable, so repository tests cannot be executed locally in this session; test-only bounty branches are written against the current source/API and remain pending maintainer/CI verification.
+4. Do not treat scraped/mirrored issue amounts as payout proof. Prefer platform-backed bounties, maintainer-confirmed rewards, or merged/accepted work.
 
 ## Operating rules
 
