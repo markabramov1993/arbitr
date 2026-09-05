@@ -63,6 +63,8 @@ contract MorphoSelfFundedLiquidatorV2 {
     error NotMorpho();
     error Busy();
     error NoActiveLiquidation();
+    error CallbackAlreadyHandled();
+    error MissingCallback();
     error InvalidAddress();
     error InvalidMarket();
     error InvalidVenue();
@@ -90,6 +92,7 @@ contract MorphoSelfFundedLiquidatorV2 {
     IAeroSlipstreamRouterV2 public immutable aeroRouter;
 
     bool private active;
+    bool private callbackHandled;
     address private activeLoanToken;
     address private activeCollateralToken;
     uint256 private collateralBalanceBefore;
@@ -135,6 +138,7 @@ contract MorphoSelfFundedLiquidatorV2 {
         if (poolParameter <= 0) revert InvalidPoolParameter();
 
         active = true;
+        callbackHandled = false;
         activeLoanToken = marketParams.loanToken;
         activeCollateralToken = marketParams.collateralToken;
         collateralBalanceBefore = IERC20LiquidatorV2(marketParams.collateralToken).balanceOf(address(this));
@@ -148,6 +152,9 @@ contract MorphoSelfFundedLiquidatorV2 {
 
         (uint256 seizedAssetsOut, uint256 repaidAssetsOut) =
             morpho.liquidate(marketParams, borrower, 0, repaidShares, hex"01");
+
+        // A valid self-funded liquidation must enter our callback exactly once.
+        if (!callbackHandled) revert MissingCallback();
 
         // Cross-check the callback bookkeeping against Morpho's own return values.
         if (seizedAssetsOut != callbackSeizedAssets || repaidAssetsOut != callbackRepaidAssets) revert InvalidMarket();
@@ -181,6 +188,12 @@ contract MorphoSelfFundedLiquidatorV2 {
     function onMorphoLiquidate(uint256 repaidAssets, bytes calldata) external {
         if (msg.sender != address(morpho)) revert NotMorpho();
         if (!active) revert NoActiveLiquidation();
+        if (callbackHandled) revert CallbackAlreadyHandled();
+
+        // Consume the callback before any token/router external call. If a downstream call
+        // re-enters through Morpho, the second callback is rejected. A revert rolls this flag
+        // back together with the whole liquidation transaction.
+        callbackHandled = true;
 
         uint256 currentCollateral = IERC20LiquidatorV2(activeCollateralToken).balanceOf(address(this));
         uint256 seized = currentCollateral - collateralBalanceBefore;
@@ -235,6 +248,7 @@ contract MorphoSelfFundedLiquidatorV2 {
 
     function _clearContext() internal {
         active = false;
+        callbackHandled = false;
         activeLoanToken = address(0);
         activeCollateralToken = address(0);
         collateralBalanceBefore = 0;
