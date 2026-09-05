@@ -20,8 +20,10 @@ jobs:
           set -euo pipefail
           WALLET='RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d'
           echo '=== BALANCE ==='
-          curl -fsS --retry 2 --connect-timeout 10 "https://rustchain.org/api/balance?wallet=${WALLET}" || true
+          curl -kfsS --retry 2 --connect-timeout 10 "https://rustchain.org/wallet/balance?miner_id=${WALLET}" || true
           echo
           echo '=== HISTORY ==='
-          curl -fsS --retry 2 --connect-timeout 10 "https://rustchain.org/wallet/history?miner_id=${WALLET}" || true
+          curl -kfsS --retry 2 --connect-timeout 10 "https://rustchain.org/wallet/history?miner_id=${WALLET}&limit=50" || true
           echo
+
+# FLASH payout refresh: 2026-09-06
