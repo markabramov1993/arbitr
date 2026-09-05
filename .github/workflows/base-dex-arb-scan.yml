@@ -84,4 +84,4 @@ jobs:
           path: cbbtc-fork.txt
           retention-days: 30
 
-# FLASH full live route matrix refresh: 2026-09-04T21:00Z
+# FLASH full live route matrix refresh: 2026-09-05T00:30Z
