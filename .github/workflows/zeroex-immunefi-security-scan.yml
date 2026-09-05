@@ -57,7 +57,10 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          slither . --compile-force-framework foundry --exclude-low --exclude-informational 2>&1 | tee ../zeroex-slither.log
+          # Slither's unused-return detector currently crashes on a top-level type alias
+          # in this upstream. Exclude only that detector so the remaining suite can
+          # finish and produce a trustworthy completion marker.
+          slither . --compile-force-framework foundry --exclude-low --exclude-informational --exclude unused-return 2>&1 | tee ../zeroex-slither.log
 
       - name: Summarize evidence
         if: always()
@@ -67,7 +70,7 @@ jobs:
           echo "SLITHER_OUTCOME=${{ steps.slither.outcome }}"
           echo '--- security signal summary ---'
           if [ -f zeroex-slither.log ]; then
-            grep -Ei '(high|medium|reentr|arbitrary|delegatecall|uninitialized|controlled|selfdestruct|signature|permit|call.value|assembly|unchecked|oracle|price)' zeroex-slither.log | tail -n 200 || true
+            grep -Ei '(high|medium|reentr|arbitrary|delegatecall|uninitialized|controlled|selfdestruct|signature|permit|call.value|assembly|unchecked|oracle|price)' zeroex-slither.log | tail -n 220 || true
           else
             echo 'No Slither log produced.'
           fi
@@ -93,9 +96,12 @@ jobs:
             echo 'SECURITY_SCAN_HEALTH=FAIL forge build did not complete'
             exit 1
           fi
-          if [ "${{ steps.slither.outcome }}" != "success" ]; then
-            echo 'SECURITY_SCAN_HEALTH=FAIL Slither did not complete'
+          if [ ! -s zeroex-slither.log ]; then
+            echo 'SECURITY_SCAN_HEALTH=FAIL no Slither evidence'
             exit 1
           fi
-          test -s zeroex-slither.log
+          if ! grep -Eq 'INFO:Slither:.*analyzed \([0-9]+ contracts? with [0-9]+ detectors?\)' zeroex-slither.log; then
+            echo 'SECURITY_SCAN_HEALTH=FAIL no explicit Slither completion marker'
+            exit 1
+          fi
           echo 'SECURITY_SCAN_HEALTH=OK'
