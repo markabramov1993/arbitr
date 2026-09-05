@@ -19,6 +19,8 @@ jobs:
           version: stable
       - name: Build Solidity harness
         run: forge build
+      - name: Test Morpho callback safety invariants
+        run: forge test --match-contract MorphoSelfFundedLiquidatorV2SafetyTest -vv
       - name: Inspect live Base SVR aggregators
         shell: bash
         run: |
