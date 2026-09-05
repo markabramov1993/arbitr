@@ -103,9 +103,14 @@ jobs:
             echo 'SECURITY_SCAN_HEALTH=FAIL forge build did not complete'
             exit 1
           fi
-          if [ "${{ steps.slither.outcome }}" != "success" ]; then
-            echo 'SECURITY_SCAN_HEALTH=FAIL Slither did not complete'
+          if [ ! -s intuition-slither.log ]; then
+            echo 'SECURITY_SCAN_HEALTH=FAIL no Slither evidence'
             exit 1
           fi
-          test -s intuition-slither.log
+          # Slither may return a non-zero exit after reporting detector findings.
+          # Count the scan as complete only when its explicit analyzed marker exists.
+          if ! grep -Eq 'INFO:Slither:.*analyzed \([0-9]+ contracts? with [0-9]+ detectors?\)' intuition-slither.log; then
+            echo 'SECURITY_SCAN_HEALTH=FAIL no explicit Slither completion marker'
+            exit 1
+          fi
           echo 'SECURITY_SCAN_HEALTH=OK'
