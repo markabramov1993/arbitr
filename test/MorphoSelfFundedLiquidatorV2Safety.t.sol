@@ -74,12 +74,17 @@ contract MockMorphoLiquidatorV2 is IMorphoLiquidatorV2 {
 
         require(collateral.transfer(msg.sender, SEIZED), "send collateral");
 
-        if (!skipCallback) {
+        if (skipCallback) {
+            // Deliberately emulate an invalid Morpho integration that returns without
+            // entering the executor callback. Do not pull repayment here: the purpose
+            // of this branch is to prove execute() itself rejects the missing callback.
+            return (SEIZED, repaidShares);
+        }
+
+        IMorphoCallbackTargetV2(msg.sender).onMorphoLiquidate(repaidShares, data);
+        if (doubleCallback) {
+            // A hostile/buggy repeated callback must be rejected before a second swap.
             IMorphoCallbackTargetV2(msg.sender).onMorphoLiquidate(repaidShares, data);
-            if (doubleCallback) {
-                // A hostile/buggy repeated callback must be rejected before a second swap.
-                IMorphoCallbackTargetV2(msg.sender).onMorphoLiquidate(repaidShares, data);
-            }
         }
 
         require(loan.transferFrom(msg.sender, address(this), repaidShares), "pull repayment");
