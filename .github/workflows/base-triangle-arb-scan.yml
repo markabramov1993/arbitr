@@ -1,0 +1,60 @@
+name: Base Triangle Arb Scan
+
+on:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - 'scripts/base_triangle_arb_scan.py'
+      - '.github/workflows/base-triangle-arb-scan.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Exact same-block triangular quote search
+        shell: bash
+        env:
+          MIN_NET_USD: '0.10'
+        run: |
+          set -o pipefail
+          export UNI_SEL=$(cast sig 'quoteExactInputSingle((address,address,uint256,uint24,uint160))')
+          export AERO_SEL=$(cast sig 'quoteExactInputSingleV3((address,address,uint256,int24,uint160))')
+          export FLASH_SEL=$(cast sig 'FLASHLOAN_PREMIUM_TOTAL()')
+          python3 scripts/base_triangle_arb_scan.py 2>&1 | tee base-triangle-arb.log
+      - name: Gate executable candidate
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          rows=[]
+          p=Path('base-triangle-arb.log')
+          if p.exists():
+              for line in p.read_text(encoding='utf-8',errors='replace').splitlines():
+                  try:o=json.loads(line)
+                  except Exception:continue
+                  if o.get('kind')=='route':rows.append(o)
+          rows.sort(key=lambda x:float(x.get('estimated_net_usd',-1e99)),reverse=True)
+          best=rows[0] if rows else None
+          print('TRIANGLE_ROUTES_TESTED=',len(rows))
+          print('TRIANGLE_NET_POSITIVE=',sum(float(x.get('estimated_net_usd',0))>0 for x in rows))
+          if best: print('TRIANGLE_BEST=',json.dumps(best,separators=(',',':')))
+          print('EXECUTION_GATE='+('OPEN' if best and float(best.get('estimated_net_usd',0))>=0.10 else 'CLOSED'))
+          PY
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: base-triangle-arb-live
+          path: base-triangle-arb.log
+          retention-days: 14
