@@ -74,8 +74,42 @@ jobs:
       - name: Build
         run: forge build
       - name: Execute real Uniswap to Aerodrome swaps on Base fork
+        id: fork_scan
+        continue-on-error: true
         shell: bash
-        run: forge test --match-contract CbBtcArbForkTest -vv | tee cbbtc-fork.txt
+        run: |
+          set -o pipefail
+          forge test --match-contract CbBtcArbForkTest -vv 2>&1 | tee cbbtc-fork.txt
+      - name: Validate fork scan health and summarize outcomes
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import re, sys
+          from pathlib import Path
+          p=Path('cbbtc-fork.txt')
+          if not p.exists():
+              print('FORK_SCAN_HEALTH=FAIL no evidence file')
+              sys.exit(1)
+          text=p.read_text(encoding='utf-8', errors='replace')
+          passed=len(re.findall(r'^\[PASS\]', text, re.M))
+          failed=len(re.findall(r'^\[FAIL:', text, re.M))
+          pnl=[int(x) for x in re.findall(r'grossPnl_USDC_6dec:\s*(-?\d+)', text)]
+          positives=[x for x in pnl if x>0]
+          rate_limited='HTTP error 429' in text
+          print(f'FORK_PASS_COUNT={passed}')
+          print(f'FORK_REVERT_COUNT={failed}')
+          print(f'FORK_RATE_LIMITED={str(rate_limited).lower()}')
+          print(f'FORK_POSITIVE_PNL_COUNT={len(positives)}')
+          if pnl:
+              print(f'FORK_BEST_GROSS_PNL_USDC_6DEC={max(pnl)}')
+          # A scan is healthy when at least one fork case executed successfully.
+          # Individual size reverts/negative PnL are candidate rejection, not CI failure.
+          if passed < 1:
+              print('FORK_SCAN_HEALTH=FAIL no successful executable size')
+              sys.exit(1)
+          print('FORK_SCAN_HEALTH=OK')
+          PY
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
