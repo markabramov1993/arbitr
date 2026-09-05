@@ -10,6 +10,7 @@ on:
 permissions:
   contents: read
 
+# Refresh verification whenever the PR head changes materially.
 jobs:
   test:
     runs-on: ubuntu-24.04
