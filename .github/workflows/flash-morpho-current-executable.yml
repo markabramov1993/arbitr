@@ -1,0 +1,85 @@
+name: FLASH Morpho Current Executable Scan
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [profit-engine-v07]
+    paths: ['.github/workflows/flash-morpho-current-executable.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: foundry-rs/foundry-toolchain@v1
+        with: {version: stable}
+      - name: Find current Base Morpho positions and fork-test liquidation
+        shell: bash
+        run: |
+          set -euo pipefail
+          API='https://api.morpho.org/graphql'
+          REMOTE='https://base-mainnet.g.alchemy.com/public'
+          LOCAL='http://127.0.0.1:8545'
+          MORPHO='0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb'
+          WETH='0x4200000000000000000000000000000000000006'
+          EOA='0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
+          MAX='0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+          python3 - <<'PY' >/tmp/candidates.tsv
+          import json, urllib.request, time
+          API='https://api.morpho.org/graphql'; WETH='0x4200000000000000000000000000000000000006'.lower()
+          def gql(q):
+              req=urllib.request.Request(API,data=json.dumps({'query':q}).encode(),headers={'content-type':'application/json','user-agent':'flash-current-morpho'})
+              with urllib.request.urlopen(req,timeout=30) as r:o=json.loads(r.read())
+              if o.get('errors'): raise RuntimeError(o['errors'])
+              return o['data']
+          q='''query { markets(first: 60, orderBy: SupplyAssetsUsd, orderDirection: Desc, where: { chainId_in: [8453], listed: true }) { items { marketId lltv loanAsset { address } collateralAsset { address symbol } oracle { address } irmAddress } } }'''
+          rows=[]
+          for m in gql(q)['markets']['items']:
+              if m['loanAsset']['address'].lower()!=WETH: continue
+              mid=m['marketId']; lltv=int(m['lltv'])/1e18
+              pq=f'''query {{ marketPositions(first: 100, orderBy: BorrowShares, orderDirection: Desc, where: {{ marketUniqueKey_in: ["{mid}"] }}) {{ items {{ user {{ address }} state {{ borrowAssetsUsd collateralUsd }} }} }} }}'''
+              try: ps=gql(pq)['marketPositions']['items']
+              except Exception: continue
+              for p in ps:
+                  s=p['state']; debt=float(s.get('borrowAssetsUsd') or 0); coll=float(s.get('collateralUsd') or 0)
+                  if debt<=0 or coll<=0: continue
+                  hf=coll*lltv/debt
+                  if hf <= 1.02:
+                      rows.append((hf,debt,mid,p['user']['address'],m['loanAsset']['address'],m['collateralAsset']['address'],m['oracle']['address'],m['irmAddress'],m['lltv'],m['collateralAsset']['symbol']))
+              time.sleep(.02)
+          rows.sort(key=lambda x:(x[0],-x[1]))
+          for r in rows[:30]: print('\t'.join(map(str,r)))
+          PY
+
+          echo "NEAR_CANDIDATES=$(wc -l </tmp/candidates.tsv | tr -d ' ')"
+          head -30 /tmp/candidates.tsv || true
+          [ -s /tmp/candidates.tsv ] || { echo 'CURRENT_EXECUTABLE_COUNT=0'; exit 0; }
+
+          anvil --fork-url "$REMOTE" --chain-id 8453 --port 8545 --silent >/tmp/anvil.log 2>&1 & PID=$!; trap 'kill $PID 2>/dev/null || true' EXIT
+          for i in {1..30}; do cast block-number --rpc-url "$LOCAL" >/dev/null 2>&1 && break; sleep 1; done
+          echo "FORK_BLOCK=$(cast block-number --rpc-url "$LOCAL")"
+          cast send "$WETH" 'deposit()' --value 1000ether --from "$EOA" --unlocked --rpc-url "$LOCAL" >/dev/null
+          cast send "$WETH" 'approve(address,uint256)' "$MORPHO" "$MAX" --from "$EOA" --unlocked --rpc-url "$LOCAL" >/dev/null
+          FOUND=0
+          while IFS=$'\t' read -r HF DEBT MARKET BORROWER LOAN COLL ORACLE IRM LLTV SYMBOL; do
+            [ -n "$MARKET" ] || continue
+            POS=$(cast call "$MORPHO" 'position(bytes32,address)(uint256,uint128,uint128)' "$MARKET" "$BORROWER" --rpc-url "$LOCAL" 2>/dev/null || true)
+            SHARES=$(printf '%s\n' "$POS" | sed -n '2p' | awk '{print $1}')
+            [ -n "$SHARES" ] && [ "$SHARES" != 0 ] || continue
+            SNAP=$(cast rpc evm_snapshot --rpc-url "$LOCAL" | tr -d '"')
+            set +e
+            OUT=$(cast send "$MORPHO" 'liquidate((address,address,address,address,uint256),address,uint256,uint256,bytes)' "($LOAN,$COLL,$ORACLE,$IRM,$LLTV)" "$BORROWER" 0 "$SHARES" 0x --from "$EOA" --unlocked --rpc-url "$LOCAL" --json 2>&1)
+            RC=$?
+            set -e
+            cast rpc evm_revert "$SNAP" --rpc-url "$LOCAL" >/dev/null || true
+            if [ "$RC" -eq 0 ]; then
+              FOUND=$((FOUND+1)); echo "CURRENT_FORK_LIQUIDATABLE=true hf_api=$HF debt_usd=$DEBT market=$MARKET borrower=$BORROWER collateral=$SYMBOL shares=$SHARES"
+            else
+              echo "HEALTHY_ON_FORK hf_api=$HF debt_usd=$DEBT market=$MARKET borrower=$BORROWER collateral=$SYMBOL"
+            fi
+          done </tmp/candidates.tsv
+          echo "CURRENT_EXECUTABLE_COUNT=$FOUND"
