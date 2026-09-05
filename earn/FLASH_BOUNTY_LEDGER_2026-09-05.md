@@ -24,11 +24,14 @@ Fresh nominal pipeline added today: **$635**. Cleared cash added today: **$0 unt
 
 - Advertised pool: **500 USDC** on Superteam Earn.
 - Public Mermail announcement: reusable Mermail Agent Skill + live video demo; deadline stated as **2026-09-23**.
-- Concept built: `mermail-bounty-ops`, a community/unofficial Mermail companion skill for safe bounty/freelance inbox operations.
+- Concept built: `mermail-bounty-ops`, a community/unofficial **worker-side** Mermail companion skill for safe bounty/freelance inbox operations.
 - Public branch: `earn/superteam-mermail-bounty-ops` in `markabramov1993/arbitr`.
-- Draft review PR: `markabramov1993/arbitr#4`.
-- Package currently contains 7 isolated files / 666 added lines: `SKILL.md`, OpenAI/MCP metadata, tool reference, security reference, README, live-demo script, and Superteam submission copy/checklist.
-- Code/docs phase: **ready**.
+- Draft review PR: `markabramov1993/arbitr#4` — open, mergeable, intentionally draft until live evidence is available.
+- Current review surface: 10 changed files / 942 additions, including `SKILL.md`, OpenAI/MCP metadata, tool/security references, README, demo script, submission copy, 7 machine-readable scenarios, a self-contained validator, and a dedicated GitHub Actions validation workflow.
+- Automated validation: **PASS** on current submission head. Validator checks public Mermail authoring constraints plus untrusted-mail, external-effect, duplicate-prevention, and `opportunity -> accepted -> paid` invariants.
+- Official Mermail ecosystem contact: opened `Nudgen-Marketing/mermail-skills#173` — `Companion skill proposal: mermail-bounty-ops — worker-side paid-task operations`; awaiting maintainer feedback.
+- Positioning explicitly differentiates the skill from public Mermail proposals #70 (`mermail-opportunity-gate`), #136 (`mermail-pact`), and #154 (Freelance Deal Desk).
+- Code/docs/validation phase: **ready**.
 - Live Mermail OAuth/MCP test: **blocked by disconnected interactive browser**.
 - Video demo: **script ready; live recording pending**.
 - Superteam submission: **not submitted yet**; authenticated profile/browser step pending.
@@ -64,16 +67,28 @@ Known RTC amount with explicit numeric rewards in recovered mail: **154 RTC nomi
 ## Superteam / verified-platform track
 
 - ProofRoute / Germany Ideathon package was emailed to Superteam Germany on 2026-09-04.
-- Current Superteam public listings verified on 2026-09-05 include Mermail Agent Skill (500 USDC), Terminal 3 trusted-agent docs (290 USDC), ZNS Solana Creator Challenge (500 USDC), and other current content/dev bounties.
-- Treat individual listing status as dynamic and re-check before starting; previously surfaced Sana.run and some regional opportunities showed inconsistent/stale indexing and are not current priority targets without a fresh exact-listing verification.
-- Priority: platform-backed opportunities with a reproducible deliverable and clear submission path.
+- Current exact-listing audits on 2026-09-05:
+  - Mermail Agent Skill — 500 USDC: best current target; deliverable materially advanced as above.
+  - Terminal 3 trusted-agent docs — 290 USDC: real/global but already ~86 submissions and requires SSO + DID + API key/Quickstart; not current priority while browser auth is blocked.
+  - ZNS Solana Creator Challenge — 500 USDC: requires launching a token plus organic volume/holder activity; skipped because it is not a zero-capital seed path and activity must not be fabricated.
+  - Steve Agent Arena — 500 USDC: low current submission count but requires live Solana agent activity; candidate only after interactive access and without artificial trading/activity.
+  - Superteam Canada Solana dashboard — 1,000 USDG: technically attractive but Canada-only; user is in Germany, so skipped rather than bypassing regional eligibility.
+  - Manic Bug Bounty — 1,000 USDC: explicitly requires deposits and real-money trading; skipped rather than risking seed capital for testing.
+- Priority: platform-backed opportunities with a reproducible deliverable, global/user-eligible rules, no artificial activity, and no requirement to risk user funds.
+
+## Other verified-source filters
+
+- Tenstorrent has a real bounty program, but current `label:bounty no:assignee` search returned no free items. The surfaced $5,000 issue #55502 is assigned and its maintainer explicitly asked others not to request assignment; skipped.
+- warpSpeed OPEN is a real paid bounty platform with published payment/review/KYC terms, but its $750 Email Threads API already has multiple claims and active submissions. Platform terms also prohibit automated claiming/submission; skipped.
+- Claude Builders / Opire #2-#5 are real-formatted bounty issues but currently have very high competition (roughly 1,100-1,600+ comments on #3-#5, and much more on #2); skipped rather than joining a crowded race.
+- False-positive radar amounts are discarded when the number is not a reward (for example a BTC price embedded in issue text).
 
 ## Current blockers
 
-1. GitHub App can write to the user's repos/forks but gets `403 Resource not accessible by integration` on several upstream issue/PR writes.
+1. GitHub App can write to the user's repos/forks and can now create at least some external issues (Mermail companion issue #173 succeeded), but several upstream PR/comment writes still return `403 Resource not accessible by integration`.
 2. Opera Browser Connector still reports: `Browser not connected. Make sure to enable Allow AI connection ... and sign in with your Opera account.` This blocks authenticated Mermail/Superteam web/OAuth steps that cannot be completed through Gmail/GitHub.
 3. Remote Desktop Commander has no connected device.
-4. Local/container internet is unavailable, so repository tests cannot be executed locally in this session; test-only bounty branches are written against the current source/API and remain pending maintainer/CI verification.
+4. Local/container internet is unavailable, but user-owned GitHub Actions can provide reproducible CI for work hosted in `markabramov1993/arbitr`; Mermail validation is now green this way.
 5. Do not treat scraped/mirrored issue amounts as payout proof. Prefer platform-backed bounties, maintainer-confirmed rewards, or merged/accepted work.
 
 ## Operating rules
