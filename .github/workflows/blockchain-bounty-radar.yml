@@ -35,8 +35,46 @@ jobs:
           now = datetime.datetime.now(datetime.timezone.utc).isoformat()
           print(f'# Blockchain bounty radar\n\nUTC: {now}\n')
           hits = []
+          rejected = []
+          TOKEN = os.environ['GH_TOKEN']
 
-          # Superteam public opportunity pages. We intentionally treat page text as discovery only.
+          def gh_json(url):
+              req=urllib.request.Request(url,headers={
+                  'Accept':'application/vnd.github+json',
+                  'Authorization':'Bearer '+TOKEN,
+                  'User-Agent':'profit-engine-bounty-radar/2.0',
+              })
+              return json.loads(urllib.request.urlopen(req,timeout=20).read())
+
+          # Amounts only count when they are syntactically attached to a reward/bounty
+          # declaration. This prevents market prices like "$64,500" from becoming fake bounties.
+          reward_patterns = [
+              re.compile(r'(?i)(?:bounty|reward|prize|payout|real reward)[^\n$]{0,45}\$\s*([0-9][0-9,]*(?:\.\d+)?)'),
+              re.compile(r'(?i)(?:bounty|reward|prize|payout|real reward)[^\n]{0,45}([0-9][0-9,]*(?:\.\d+)?)\s*(?:USDC|USDG|USD)\b'),
+              re.compile(r'(?i)\$\s*([0-9][0-9,]*(?:\.\d+)?)[^\n]{0,35}(?:bounty|reward|prize|payout)\b'),
+          ]
+
+          def declared_reward(title, body):
+              # Title is high-confidence if it explicitly contains bounty/reward.
+              text=(title or '')+'\n'+(body or '')
+              vals=[]
+              for pat in reward_patterns:
+                  for m in pat.finditer(text):
+                      try: vals.append(float(m.group(1).replace(',','')))
+                      except Exception: pass
+              return max(vals, default=0.0)
+
+          def source_issue(body):
+              # Mirror/aggregator issues often contain a canonical source URL.
+              # Resolve it and use the original issue's assignment state.
+              for m in re.finditer(r'https://github\.com/([^/\s]+)/([^/\s]+)/issues/(\d+)', body or '', re.I):
+                  owner, repo, num = m.group(1), m.group(2), m.group(3)
+                  # Avoid treating a self-link as an upstream source.
+                  return owner, repo, int(num)
+              return None
+
+          # Superteam pages remain discovery-only. Require an amount near explicit
+          # bounty/reward/prize wording rather than any dollar value in page text.
           urls = [
               'https://superteam.fun/earn/bounties',
               'https://superteam.fun/earn/opportunities/development-bounties',
@@ -44,57 +82,74 @@ jobs:
           ]
           for url in urls:
               try:
-                  req=urllib.request.Request(url,headers={'user-agent':'profit-engine-bounty-radar/1.0'})
+                  req=urllib.request.Request(url,headers={'user-agent':'profit-engine-bounty-radar/2.0'})
                   text=urllib.request.urlopen(req,timeout=20).read().decode('utf-8','ignore')
-                  # capture compact text around USDC/USDG amounts
                   plain=re.sub(r'<[^>]+>',' ',text)
                   plain=re.sub(r'\s+',' ',plain)
-                  for m in re.finditer(r'(?i)(?:USDC|USDG|\$)\s*([0-9][0-9,]*(?:\.\d+)?)|([0-9][0-9,]*(?:\.\d+)?)\s*(USDC|USDG)',plain):
-                      s=max(0,m.start()-120); e=min(len(plain),m.end()+220)
-                      snippet=plain[s:e]
-                      nums=re.findall(r'[0-9][0-9,]*(?:\.\d+)?',m.group(0))
-                      amount=float(nums[0].replace(',','')) if nums else 0
+                  for m in re.finditer(r'(?i)(?:bounty|reward|prize)[^$]{0,80}\$\s*([0-9][0-9,]*(?:\.\d+)?)',plain):
+                      amount=float(m.group(1).replace(',',''))
                       if amount>=500:
-                          hits.append(('Superteam',amount,url,snippet[:420]))
+                          s=max(0,m.start()-100); e=min(len(plain),m.end()+220)
+                          hits.append(('Superteam',amount,url,plain[s:e][:420],'DISCOVERY'))
               except Exception as e:
                   print(f'- Superteam fetch failed: {url}: {e}')
 
-          # GitHub public issues mentioning explicit USD/USDC bounties.
           q='is:issue is:open (bounty OR reward) (USDC OR USDG OR "$500" OR "$1000" OR "$5000")'
           api='https://api.github.com/search/issues?q='+urllib.parse.quote(q)+'&sort=updated&order=desc&per_page=50'
           try:
-              req=urllib.request.Request(api,headers={'Accept':'application/vnd.github+json','Authorization':'Bearer '+os.environ['GH_TOKEN'],'User-Agent':'profit-engine-bounty-radar'})
-              data=json.loads(urllib.request.urlopen(req,timeout=20).read())
+              data=gh_json(api)
               for it in data.get('items',[]):
-                  blob=(it.get('title','')+' '+(it.get('body') or ''))
-                  amts=[]
-                  for pat in [r'\$\s*([0-9][0-9,]*)',r'([0-9][0-9,]*)\s*(?:USDC|USDG)']:
-                      for x in re.findall(pat,blob,re.I):
-                          try: amts.append(float((x if isinstance(x,str) else x[0]).replace(',','')))
-                          except: pass
-                  amount=max(amts or [0])
-                  if amount>=500:
-                      hits.append(('GitHub',amount,it.get('html_url'),it.get('title','')))
+                  title=it.get('title','')
+                  body=it.get('body') or ''
+                  amount=declared_reward(title,body)
+                  if amount < 500:
+                      continue
+
+                  status='DISCOVERY'
+                  canonical=source_issue(body)
+                  if canonical:
+                      try:
+                          owner, repo, num=canonical
+                          original=gh_json(f'https://api.github.com/repos/{owner}/{repo}/issues/{num}')
+                          assignees=original.get('assignees') or []
+                          if original.get('state') != 'open':
+                              rejected.append((amount,it.get('html_url'),f'canonical {owner}/{repo}#{num} is closed'))
+                              continue
+                          if assignees:
+                              names=','.join(a.get('login','?') for a in assignees)
+                              rejected.append((amount,it.get('html_url'),f'canonical {owner}/{repo}#{num} assigned to {names}'))
+                              continue
+                          status='UPSTREAM_UNASSIGNED'
+                      except Exception as e:
+                          status='MIRROR_UNVERIFIED'
+
+                  hits.append(('GitHub',amount,it.get('html_url'),title,status))
           except Exception as e:
               print(f'- GitHub search failed: {e}')
 
-          # Deduplicate by URL + compact summary.
           seen=set(); uniq=[]
-          for src,amt,url,title in sorted(hits,key=lambda x:x[1],reverse=True):
-              k=(url,title[:100])
+          for src,amt,url,title,status in sorted(hits,key=lambda x:x[1],reverse=True):
+              k=url
               if k in seen: continue
-              seen.add(k); uniq.append((src,amt,url,title))
+              seen.add(k); uniq.append((src,amt,url,title,status))
 
-          print('## High-value discovery hits (>=500 nominal)')
+          print('## High-value verified/discovery hits (>=500 nominal)')
           if not uniq:
-              print('\nNo high-value public hits in this pass.')
-          for src,amt,url,title in uniq[:30]:
+              print('\nNo eligible high-value public hits in this pass.')
+          for src,amt,url,title,status in uniq[:30]:
               safe=title.replace('\n',' ')[:260]
-              print(f'- {src} | nominal {amt:g} | {url} | {safe}')
+              print(f'- {src} | nominal {amt:g} | {status} | {url} | {safe}')
 
+          if rejected:
+              print('\n## Rejected false/occupied hits')
+              for amt,url,why in rejected[:20]:
+                  print(f'- rejected nominal {amt:g} | {url} | {why}')
+
+          # Only unassigned canonical GitHub hits or direct discovery sources can trigger
+          # the high-value alert. Rejected mirrors never set max_amount.
           max_amt=max([x[1] for x in uniq] or [0])
           print(f'\nMAX_NOMINAL_DISCOVERY={max_amt:g}')
-          print('\nDiscovery is not payout proof. Eligibility, funding, deadlines and acceptance must be verified before work.')
+          print('\nDiscovery is not payout proof. Eligibility, funding, deadlines, competition and acceptance still require verification.')
 
           with open(os.environ['GITHUB_OUTPUT'],'a') as f:
               f.write(f'high={"true" if max_amt>=1000 else "false"}\n')
