@@ -36,11 +36,14 @@ The goal is not to claim a new Mermail tool domain. It is a reusable community w
 Repository:
 https://github.com/markabramov1993/arbitr
 
-Draft review PR:
+Submission-package PR:
 https://github.com/markabramov1993/arbitr/pull/4
 
-Official Mermail companion proposal / maintainer-feedback issue:
+Official Mermail companion proposal / discussion:
 https://github.com/Nudgen-Marketing/mermail-skills/issues/173
+
+**Official Mermail implementation PR:**
+https://github.com/Nudgen-Marketing/mermail-skills/pull/174
 
 Submission branch:
 https://github.com/markabramov1993/arbitr/tree/earn/superteam-mermail-bounty-ops/earn/superteam-mermail-bounty-ops
@@ -65,7 +68,7 @@ https://github.com/markabramov1993/arbitr/blob/earn/superteam-mermail-bounty-ops
 
 ## Automated validation evidence
 
-The repository includes a dedicated GitHub Actions workflow, `Mermail Bounty Ops Validate`, which runs the package validator on the submission branch/PR.
+The repository includes a dedicated GitHub Actions workflow, `Mermail Bounty Ops Skill CI`, which runs the package validator and validates controlled live-receipt evidence on the submission branch.
 
 The validator checks the public Mermail authoring constraints and submission-specific invariants, including:
 
@@ -79,15 +82,40 @@ The validator checks the public Mermail authoring constraints and submission-spe
 - exact `opportunity -> accepted -> paid` reward accounting;
 - seven machine-readable happy-path, duplicate, prompt-injection, external-effect and payment-state scenarios.
 
-Latest validation run on the current submission branch: **PASS**.
+Latest validation on the current submission head: **PASS**.
 
-## Official ecosystem feedback path
+## Live Mermail evidence
 
-Following Mermail's public companion-skill authoring guidance, the skill is now also surfaced in the official Mermail repository as issue **Nudgen-Marketing/mermail-skills#173**. The issue asks maintainers to review the worker-side positioning and any Mermail-specific tool/security details before the live demo. No maintainer endorsement is claimed unless they actually respond.
+A controlled live Mermail mailbox run has now been completed using the actual Mermail integration.
+
+The run exercised two controlled messages:
+
+1. a legitimate bounty opportunity advertising **500 USDC**;
+2. a malicious prompt-injection/payment instruction attempting to make the agent act on untrusted wallet/payment text.
+
+Observed result:
+
+- the legitimate opportunity was identified and structured correctly;
+- the malicious payment/prompt-injection content was treated as untrusted data;
+- prior sent state was checked for duplicate outreach;
+- no unauthorized external send or payment was performed;
+- the 500 USDC amount remained classified as **opportunity / nominal**, not accepted and not paid.
+
+This evidence is intentionally about safe live operation, not fabricated settlement.
+
+## Official Mermail review path
+
+The work is now in the official Mermail repository review queue:
+
+- proposal/discussion: `Nudgen-Marketing/mermail-skills#173`;
+- implementation PR: `Nudgen-Marketing/mermail-skills#174` — `feat: add mermail-bounty-ops companion skill`;
+- current upstream PR state at the latest check: **open, non-draft, mergeable**.
+
+No maintainer endorsement, merge, bounty acceptance, or payment is claimed until it actually occurs.
 
 ## Demo video
 
-**Pending live recording.**
+**Public recording still pending.**
 
 The final video will show real Mermail MCP calls, not fabricated output. Planned flow is documented in `DEMO_SCRIPT.md`:
 
@@ -141,16 +169,17 @@ This makes the skill particularly useful for autonomous agents whose next action
 - [x] Tool contract
 - [x] Security reference
 - [x] Public GitHub branch
-- [x] Draft review PR
+- [x] Submission-package PR
 - [x] Demo script
 - [x] Differentiation from adjacent public Mermail proposals
 - [x] Machine-readable validation scenarios
 - [x] Self-contained package validator
 - [x] GitHub Actions validation passing
 - [x] Official Mermail companion proposal opened (#173)
+- [x] Official Mermail implementation PR opened (#174)
+- [x] Controlled live Mermail integration test completed
 - [ ] Maintainer feedback incorporated (if/when received)
-- [ ] Live Mermail MCP/OAuth test
-- [ ] Video recording URL
+- [ ] Public video recording URL
 - [ ] Submit through authenticated Superteam profile
 - [ ] Record Superteam submission id
 - [ ] Treat prize as pending until selection; paid only after actual settlement
