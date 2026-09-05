@@ -21,6 +21,8 @@ jobs:
         run: forge build
       - name: Test Morpho callback safety invariants
         run: forge test --match-contract MorphoSelfFundedLiquidatorV2SafetyTest -vv
+      - name: Test Aave flash arbitrage executor safety invariants
+        run: forge test --match-contract FlashArbExecutorSafetyTest -vv
       - name: Inspect live Base SVR aggregators
         shell: bash
         run: |
