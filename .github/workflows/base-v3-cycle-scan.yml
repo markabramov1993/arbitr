@@ -47,7 +47,6 @@ jobs:
               raw=bytes.fromhex(bhex[2:]); pad=(32-len(raw)%32)%32
               return enc_uint(len(raw)) + raw.hex() + '00'*pad
           def quote_calldata(p,amount):
-              # ABI: selector | offset=64 | amount | bytes_length | bytes_data
               return '0x'+quote_sel+enc_uint(64)+enc_uint(amount)+enc_bytes(p)
           def post(url,payload):
               data=json.dumps(payload).encode(); req=urllib.request.Request(url,data=data,headers={'content-type':'application/json','user-agent':'profit-engine-v07'})
@@ -94,8 +93,6 @@ jobs:
               if len(words)<4: missing+=1; continue
               out=words[0]/1e6; gas_est=words[3]
               gross=out-usd
-              # Need ETH/USD for gas conversion. For screening, derive from the route itself only when output nonzero.
-              # Use a conservative $2600/ETH ceiling near the observed V2 market (~$2516), plus 120k gas for flash/settlement and $0.08 L1 data reserve.
               eth_usd=2600.0
               gas_usd=(gas_est+120_000)*gas_price/1e18*eth_usd+0.08
               flash=usd*flash_bps/10000
@@ -111,3 +108,5 @@ jobs:
           else:
               print('No valid V3 two-pool cycle quotes returned.')
           PY
+
+# FLASH fresh V3 cycle scan: 2026-09-05T00:38Z
