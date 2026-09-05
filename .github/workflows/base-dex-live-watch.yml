@@ -3,7 +3,7 @@ name: Base DEX Live Watch
 on:
   workflow_dispatch:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/10 * * * *'
   push:
     branches: [main]
     paths:
@@ -16,12 +16,12 @@ permissions:
 
 concurrency:
   group: base-dex-live-watch
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   scan-and-fork:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,13 +49,14 @@ jobs:
           echo '=== SHORTLIST ==='
           cat dex-candidate.json
 
-      - name: Execute shortlisted routes on independent fresh Base forks
+      - name: Execute shortlisted routes on one fresh Base fork
         shell: bash
         run: |
           set +e
           set -o pipefail
           cd dexwatch
-          forge test --match-contract GeneratedBaseDexArbTest -vv 2>&1 | tee ../base-dex-fork-validation.log
+          timeout --signal=TERM --kill-after=15s 360s \
+            forge test --match-contract GeneratedBaseDexArbTest -vv 2>&1 | tee ../base-dex-fork-validation.log
           RC=${PIPESTATUS[0]}
           cd ..
           echo "$RC" > base-dex-fork-exit.txt
@@ -67,7 +68,7 @@ jobs:
         run: |
           echo '=== EXECUTION SIGNAL ==='
           RC=$(cat base-dex-fork-exit.txt 2>/dev/null || echo 99)
-          grep -E 'EDGE_COUNT|SIZE_COUNT|FORK_PROFITABLE_COUNT|POSITIVE_ROUTE|ROUTE_INDEX|ASSET|AMOUNT_IN_USDC_RAW|BUY_IS_UNI|BUY_TIER|SELL_IS_UNI|SELL_TIER|FORK_GROSS_PNL_USDC_RAW|SPOT_EDGE_BPS_E6' base-dex-fork-validation.log || true
+          grep -E 'FORK_ID|FORK_BLOCK|EDGE_COUNT|SIZE_COUNT|FORK_PROFITABLE_COUNT|POSITIVE_ROUTE|ROUTE_INDEX|ASSET|AMOUNT_IN_USDC_RAW|BUY_IS_UNI|BUY_TIER|SELL_IS_UNI|SELL_TIER|FORK_GROSS_PNL_USDC_RAW|SPOT_EDGE_BPS_E6' base-dex-fork-validation.log || true
           if [ "$RC" = '0' ] && grep -Eq 'FORK_PROFITABLE_COUNT: [1-9][0-9]*' base-dex-fork-validation.log; then
             echo 'DEX_FORK_SURVIVED=true'
           else
@@ -88,4 +89,4 @@ jobs:
             dexwatch/test/GeneratedBaseDexArb.t.sol
           retention-days: 7
 
-# FLASH manual refresh: 2026-09-05T18:25+02:00
+# FLASH optimized fresh-fork validation: 2026-09-06
