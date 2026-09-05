@@ -1,0 +1,113 @@
+name: Intuition V2 Immunefi Readonly Security Scan
+
+on:
+  push:
+    paths:
+      - '.github/workflows/intuition-immunefi-security-scan.yml'
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout Profit Engine
+        uses: actions/checkout@v4
+
+      - name: Checkout fresh Intuition V2 core upstream
+        run: |
+          git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/0xIntuition/intuition-contracts-v2.git intuition-v2
+          cd intuition-v2
+          git rev-parse HEAD | tee ../intuition-upstream-sha.txt
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: intuition-v2/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Foundry and Slither
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Install analysis dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install slither-analyzer
+          cd intuition-v2
+          npm ci
+          forge --version
+          slither --version
+
+      - name: Build upstream contracts
+        id: build
+        working-directory: intuition-v2
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          forge build 2>&1 | tee ../intuition-forge-build.log
+
+      - name: Run Slither
+        id: slither
+        if: always()
+        working-directory: intuition-v2
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          slither . --compile-force-framework foundry --exclude-low --exclude-informational 2>&1 | tee ../intuition-slither.log
+
+      - name: Summarize evidence
+        if: always()
+        run: |
+          echo "UPSTREAM_SHA=$(cat intuition-upstream-sha.txt 2>/dev/null || echo unknown)"
+          echo "BUILD_OUTCOME=${{ steps.build.outcome }}"
+          echo "SLITHER_OUTCOME=${{ steps.slither.outcome }}"
+          echo '--- security signal summary ---'
+          if [ -f intuition-slither.log ]; then
+            grep -Ei '(high|medium|reentr|arbitrary|delegatecall|uninitialized|controlled|selfdestruct|signature|permit|accounting|rounding|oracle|price|share|vault|upgrade)' intuition-slither.log | tail -n 220 || true
+          else
+            echo 'No Slither log produced.'
+          fi
+          echo '--- end summary ---'
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: intuition-immunefi-readonly-scan
+          path: |
+            intuition-upstream-sha.txt
+            intuition-forge-build.log
+            intuition-slither.log
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Require real build and Slither completion
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ steps.build.outcome }}" != "success" ]; then
+            echo 'SECURITY_SCAN_HEALTH=FAIL forge build did not complete'
+            exit 1
+          fi
+          if [ "${{ steps.slither.outcome }}" != "success" ]; then
+            echo 'SECURITY_SCAN_HEALTH=FAIL Slither did not complete'
+            exit 1
+          fi
+          if ! grep -Eq 'analyzed|contracts? analyzed|INFO:Slither|INFO:Detectors' intuition-slither.log; then
+            echo 'SECURITY_SCAN_HEALTH=FAIL no Slither completion evidence'
+            exit 1
+          fi
+          echo 'SECURITY_SCAN_HEALTH=OK'
