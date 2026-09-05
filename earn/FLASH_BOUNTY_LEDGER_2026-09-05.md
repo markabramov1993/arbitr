@@ -22,20 +22,27 @@ Fresh nominal pipeline added today: **$635**. Cleared cash added today: **$0 unt
 
 ### Superteam / Mermail — Build and Demo a Mermail Agent Skill
 
-- Advertised pool: **500 USDC** on Superteam Earn.
-- Public Mermail announcement: reusable Mermail Agent Skill + live video demo; deadline stated as **2026-09-23**.
+- Advertised pool: **500 USDC** on Superteam Earn; prize structure currently shown as 250 USDC first, 100 second, 50 third, plus two 50 USDC bonuses.
+- Deadline shown by Mermail/Superteam: **2026-09-23**; winner announcement shown as **2026-10-01**.
 - Concept built: `mermail-bounty-ops`, a community/unofficial **worker-side** Mermail companion skill for safe bounty/freelance inbox operations.
-- Public branch: `earn/superteam-mermail-bounty-ops` in `markabramov1993/arbitr`.
-- Draft review PR: `markabramov1993/arbitr#4` — open, mergeable, intentionally draft until live evidence is available.
-- Current review surface: 10 changed files / 942 additions, including `SKILL.md`, OpenAI/MCP metadata, tool/security references, README, demo script, submission copy, 7 machine-readable scenarios, a self-contained validator, and a dedicated GitHub Actions validation workflow.
-- Automated validation: **PASS** on current submission head. Validator checks public Mermail authoring constraints plus untrusted-mail, external-effect, duplicate-prevention, and `opportunity -> accepted -> paid` invariants.
-- Official Mermail ecosystem contact: opened `Nudgen-Marketing/mermail-skills#173` — `Companion skill proposal: mermail-bounty-ops — worker-side paid-task operations`; awaiting maintainer feedback.
-- Positioning explicitly differentiates the skill from public Mermail proposals #70 (`mermail-opportunity-gate`), #136 (`mermail-pact`), and #154 (Freelance Deal Desk).
-- Code/docs/validation phase: **ready**.
-- Live Mermail OAuth/MCP test: **blocked by disconnected interactive browser**.
-- Video demo: **script ready; live recording pending**.
-- Superteam submission: **not submitted yet**; authenticated profile/browser step pending.
-- Accounting rule: the 500 USDC is an opportunity only. Do **not** add it to earned, accepted, or paid totals until the corresponding evidence exists.
+- Internal public working branch/package remains in `markabramov1993/arbitr` with validator/demo/submission materials.
+- Official fork created: `markabramov1993/mermail-skills`.
+- Official upstream PR created: **`Nudgen-Marketing/mermail-skills#174`** — open, non-draft, mergeable; head `7fbaac48a223584bb847dac67419c336a10a3c79`; 7 changed files, +587/-0.
+- Official companion proposal: `Nudgen-Marketing/mermail-skills#173`; linked to PR #174. No maintainer reply yet at the latest check.
+- Upstream workflow runs currently show `action_required` / no jobs for the external-contributor PR; this is not evidence of a code failure.
+- Validation: **PASS**. `SKILL.md` is 173/500 lines; 7 machine-readable scenarios; authoring/MCP/safety/dedup/reward-state invariants checked.
+- Live Mermail test: **completed** on an authenticated mailbox. The agent identified the legitimate 500 USDC opportunity, rejected a controlled malicious prompt-injection/payment message, found no duplicate sent claim, and performed no external send/payment.
+- Live reward-state result: **opportunity = yes; accepted = no evidence; paid = no evidence**.
+- Demo video produced from the real Mermail run: approximately **2:04**, English narration, H.264/AAC. Local final file was verified before publishing.
+- Public X media/demo post: `https://x.com/LeadsOleg/status/2096249643604570579` (verified through X oEmbed to contain media).
+- Public tagged X post: `https://x.com/LeadsOleg/status/2096354167971271154` tagging `@Mermailapp` and linking PR #174.
+- **Superteam submission filed successfully.** One credit was consumed and the listing changed from `Submit Now` to `Edit Submission`; submission count increased to 61 during verification.
+- Saved Superteam submission fields verified through Edit Submission:
+  - public PR: `https://github.com/Nudgen-Marketing/mermail-skills/pull/174`
+  - Tweet Link: `https://x.com/LeadsOleg/status/2096354167971271154`
+  - video demonstration: `https://x.com/LeadsOleg/status/2096249643604570579`
+- Submission can still be edited until the deadline. A cleanup/improvement pass should replace any placeholder text in `Anything Else` with the concise skill description and AI-client information when browser access is stable.
+- Accounting rule: the 500 USDC is an **opportunity / prize pool only**. Do **not** add it to accepted, earned, paid, or FLASH capital until corresponding evidence exists.
 
 ## Existing cash-bounty pipeline recovered from 2026-09-04 work
 
@@ -68,27 +75,27 @@ Known RTC amount with explicit numeric rewards in recovered mail: **154 RTC nomi
 
 - ProofRoute / Germany Ideathon package was emailed to Superteam Germany on 2026-09-04.
 - Current exact-listing audits on 2026-09-05:
-  - Mermail Agent Skill — 500 USDC: best current target; deliverable materially advanced as above.
-  - Terminal 3 trusted-agent docs — 290 USDC: real/global but already ~86 submissions and requires SSO + DID + API key/Quickstart; not current priority while browser auth is blocked.
+  - Mermail Agent Skill — 500 USDC: **submission filed**; official PR #174 + live Mermail demo + public X evidence now exist.
+  - Terminal 3 trusted-agent docs — 290 USDC: real/global but already high competition and requires SSO + DID + API-key quickstart; lower priority.
   - ZNS Solana Creator Challenge — 500 USDC: requires launching a token plus organic volume/holder activity; skipped because it is not a zero-capital seed path and activity must not be fabricated.
-  - Steve Agent Arena — 500 USDC: low current submission count but requires live Solana agent activity; candidate only after interactive access and without artificial trading/activity.
-  - Superteam Canada Solana dashboard — 1,000 USDG: technically attractive but Canada-only; user is in Germany, so skipped rather than bypassing regional eligibility.
+  - Steve Agent Arena — 500 USDC: requires live Solana agent activity; candidate only without artificial trading/activity.
+  - Superteam Canada Solana dashboard — 1,000 USDG: Canada-only; skipped rather than bypassing regional eligibility.
   - Manic Bug Bounty — 1,000 USDC: explicitly requires deposits and real-money trading; skipped rather than risking seed capital for testing.
-- Priority: platform-backed opportunities with a reproducible deliverable, global/user-eligible rules, no artificial activity, and no requirement to risk user funds.
+- Priority: platform-backed opportunities with reproducible deliverables, global/user-eligible rules, no artificial activity, and no requirement to risk user funds.
 
 ## Other verified-source filters
 
 - Tenstorrent has a real bounty program, but current `label:bounty no:assignee` search returned no free items. The surfaced $5,000 issue #55502 is assigned and its maintainer explicitly asked others not to request assignment; skipped.
 - warpSpeed OPEN is a real paid bounty platform with published payment/review/KYC terms, but its $750 Email Threads API already has multiple claims and active submissions. Platform terms also prohibit automated claiming/submission; skipped.
-- Claude Builders / Opire #2-#5 are real-formatted bounty issues but currently have very high competition (roughly 1,100-1,600+ comments on #3-#5, and much more on #2); skipped rather than joining a crowded race.
-- False-positive radar amounts are discarded when the number is not a reward (for example a BTC price embedded in issue text).
+- Claude Builders / Opire #2-#5 are real-formatted bounty issues but currently have very high competition; skipped rather than joining a crowded race.
+- False-positive radar amounts are discarded when the number is not a reward.
 
-## Current blockers
+## Current blockers / watch items
 
-1. GitHub App can write to the user's repos/forks and can now create at least some external issues (Mermail companion issue #173 succeeded), but several upstream PR/comment writes still return `403 Resource not accessible by integration`.
-2. Opera Browser Connector still reports: `Browser not connected. Make sure to enable Allow AI connection ... and sign in with your Opera account.` This blocks authenticated Mermail/Superteam web/OAuth steps that cannot be completed through Gmail/GitHub.
-3. Remote Desktop Commander has no connected device.
-4. Local/container internet is unavailable, but user-owned GitHub Actions can provide reproducible CI for work hosted in `markabramov1993/arbitr`; Mermail validation is now green this way.
+1. Mermail submission is **already filed**, so browser access is no longer a blocker to having a valid entry; browser stability only affects optional polishing/edits.
+2. Remote Desktop / Opera connectivity became intermittent late in the session. Do not infer that the submission or authenticated accounts were lost.
+3. Upstream Mermail PR #174 awaits maintainer review and permission to run external-contributor workflows.
+4. No new human acceptance/payment email from Lily, GrantFox, Mova, Superteam, or Mermail was found at the latest Gmail check.
 5. Do not treat scraped/mirrored issue amounts as payout proof. Prefer platform-backed bounties, maintainer-confirmed rewards, or merged/accepted work.
 
 ## Operating rules
