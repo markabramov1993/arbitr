@@ -65,7 +65,7 @@ curl -fsSL https://rustchain.org/beacon/ \
   | head
 ```
 
-For machine-readable verification, use the Atlas API endpoint documented by the RustChain bounty flow:
+For machine-readable verification, use the Atlas endpoint used by the RustChain bounty flow:
 
 ```bash
 curl -ksSL https://50.28.86.131/beacon/atlas \
@@ -102,13 +102,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          response="$(curl -ksSL --max-time 20 https://50.28.86.131/beacon/atlas)"
-          python3 - "$AGENT_ID" <<'PY' <<<"$response"
+          tmp="$(mktemp)"
+          trap 'rm -f "$tmp"' EXIT
+          curl -ksSL --fail --max-time 20 \
+            https://50.28.86.131/beacon/atlas > "$tmp"
+
+          python3 - "$AGENT_ID" "$tmp" <<'PY'
           import json
           import sys
 
           agent_id = sys.argv[1]
-          data = json.load(sys.stdin)
+          path = sys.argv[2]
+          with open(path, encoding="utf-8") as fh:
+              data = json.load(fh)
+
           rows = data if isinstance(data, list) else data.get("agents", data.get("results", []))
           matches = [x for x in rows if x.get("agent_id") == agent_id]
 
@@ -120,10 +127,12 @@ jobs:
           print(json.dumps(agent, indent=2, sort_keys=True))
 
           status = str(agent.get("status", "unknown")).lower()
-          if status not in {"active", "online", "unknown"}:
+          if status not in {"active", "alive", "online", "unknown"}:
               print(f"warning: reported status={status}")
           PY
 ```
+
+The temporary file deliberately separates the Python program (heredoc) from the JSON input. Avoid combining `<<HEREDOC` and `<<<"$response"` on the same command: both redirect stdin and can make Python parse the JSON as source code instead of running the intended script.
 
 This workflow stores no Beacon private key, no RustChain wallet key, and no API credential. It reads public state only.
 
