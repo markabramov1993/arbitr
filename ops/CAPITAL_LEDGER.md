@@ -1,92 +1,55 @@
 # PROFIT ENGINE — Capital Ledger
 
-Updated: 2026-09-04
+Updated: **2026-09-06 audit**
 
-This ledger deliberately separates real money from bounty face value and simulated PnL.
+This ledger separates money actually received from receivables, open bounty pipeline and simulated trading PnL.
 
 ## 1. Confirmed capital
 
 | Bucket | Confirmed amount | Evidence rule |
 |---|---:|---|
-| Cash / stablecoin bounty payouts | $0 confirmed | Count only after an actual transfer, platform payout, or independently verifiable wallet receipt |
-| RTC | UNKNOWN live balance | Count only after wallet balance/history is read successfully for the configured miner ID |
-| DeFi execution profit | $0 confirmed | Count only settled on-chain net profit after loan fees, DEX fees, gas, slippage and relay/builder costs |
+| Cash / stablecoin bounty payouts | **$0 confirmed** | Actual transfer, platform payout, or independently verifiable receipt only |
+| RTC | **LIVE PROBE REQUIRED** | RustChain wallet balance/history for `RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d` only |
+| DeFi execution profit | **$0 confirmed** | Settled on-chain net profit after all costs only |
 
-**CONFIRMED_USD_EQUIVALENT = $0 + verified RTC value (currently unknown)**
-
-Historical forks, oracle-valued liquidations, paper arbitrage and bounty sticker prices are NOT capital.
+Bounty labels, prize pools, emails sent, merged-looking simulations and fork PnL are not capital.
 
 ## 2. Active external earning pipeline
 
-| Opportunity | Face value | State | Count as cash? |
+| Opportunity | Face value | State | Capital? |
 |---|---:|---|---|
-| Mova Store #91 / PR #257 | $90 | Formal upstream PR open; mergeable; waiting for maintainer review/CI authorization | NO |
-| Mova Store #53 | $45 | Patch + formatting verified in fork; upstream PR creation blocked by integration; competitor has announced work | NO |
-| RustChain / RTC claims | mixed RTC | Multiple submissions sent; live wallet receipt not yet verified | NO |
-| Superteam agent-eligible radar | variable | Open listings tracked; submission/winner status required | NO |
-| Other bounty submissions | variable | Pending replies/acceptance | NO |
+| RustChain #16601 — two distinct Type C packages | 15 RTC + 15 RTC | Submitted by allowed email route Sep 4; audited valid Sep 6; official review SLA 7 days | PIPELINE |
+| Mova Store #91 / PR #257 | $90 | Open/mergeable; Sep 6 branch corrected to explicit Soroban event-topic symbols; competing PR #343 exists | PIPELINE |
+| Mermail / Superteam | 500 USDC prize pool | Superteam entry submitted; upstream PR #174 open/mergeable; judged competition | PIPELINE |
+| Other RTC claims | mixed RTC | Submitted; acceptance/payment evidence not yet recovered | PIPELINE |
+| ProofRoute Germany opportunities | 3,000 USDG Ideathon pool / grant request 5,000 USDG | Prepared; native platform submission pending browser access | NOT YET SUBMITTED / restricted if grant |
 
-## 3. Capital ladder
+## 3. Removed from active expected income
 
-1. **BOOTSTRAP** — use zero-cost GitHub Actions, public RPC, forks and external bounties.
-2. **GAS RESERVE** — first confirmed crypto/stablecoin receipts are ring-fenced for execution costs.
-3. **CONTRACT RESERVE** — fund deployment/verification only after the gas reserve exists.
-4. **LIVE MICRO-EXECUTION** — start with the cheapest chain/route and tiny controlled notional.
-5. **FLASH-LIQUIDITY EXECUTION** — flash loans only when the exact transaction is reproducibly profitable on a current fork and remains positive under conservative cost assumptions.
-6. **SCALE** — increase route coverage and execution frequency only from realized profit, not from paper PnL.
+- **Lilly batch — formerly $635 nominal:** all nine relevant upstream issues are now closed as completed with no acceptance evidence for our fallback work. Historical work only unless maintainers explicitly revive/accept it.
+- Stale mirrored bounty values and occupied/assigned tasks are not pipeline.
 
-## 4. Main on-chain tracks
+## 4. Capital ladder
 
-### A. Liquidations
-- Morpho/Base position scan
-- borrower health / LLTV boundary detection
-- fork execution
-- collateral-sale quote
-- flash-liquidity sourcing where useful
-- atomic repayment
+1. **BOOTSTRAP** — zero-cost bounties, grants, public CI/RPC and reproducible work.
+2. **CONFIRM RECEIPT** — verify cash/stablecoin/token arrival independently.
+3. **GAS RESERVE** — ring-fence first confirmed crypto/stablecoin funds for execution costs.
+4. **LIVE MICRO-EXECUTION** — only tiny controlled notional after deterministic simulation and full cost model.
+5. **FLASH-LIQUIDITY EXECUTION** — only when current-state execution remains positive under conservative fees/slippage/gas.
+6. **SCALE FROM REALIZED PROFIT** — never from bounty face value or paper PnL.
 
-### B. DEX arbitrage
-- same-chain multi-DEX quote graph
-- exact-input and exact-output simulation
-- route-size optimization
-- flash liquidity only when it improves net outcome
-- private submission path where economically justified
-
-### C. Chainlink SVR / oracle-linked opportunities
-- readonly state/event monitoring
-- opportunity reconstruction
-- fork-only execution until invariants and economics are proven
-
-### D. Protocol incentives / public rewards
-- Superteam / GitHub / ecosystem bounties
-- testnets / public incentive programs where legitimate and sybil-safe
-- grants and agent work
-- no fabricated activity, wash volume, fake users or duplicate identities
-
-## 5. Mainnet activation gates
-
-A candidate may move from paper/fork to a live transaction only when all of the following are true:
-
-- current-state quote is available;
-- transaction succeeds on a recent fork or equivalent deterministic simulation;
-- flash-loan premium is included if used;
-- every DEX/protocol fee is included;
-- gas is estimated using a conservative current price;
-- slippage / price impact is included;
-- expected net profit remains positive after a safety buffer;
-- revert/failure loss is bounded by the gas reserve;
-- no private key or seed phrase is stored in this repository or CI logs;
-- strategy does not depend on deceptive, manipulative, or prohibited activity.
-
-## 6. Accounting states
-
-Use exactly these labels in reports:
+## 5. Accounting states
 
 - **CONFIRMED** — money/token actually received or settled on-chain.
-- **RECEIVABLE** — accepted/merged and payment is contractually or explicitly due, but not received yet.
-- **PIPELINE** — submitted/open bounty or PR, not accepted yet.
+- **RECEIVABLE** — explicitly accepted/merged and payment is due, but not received.
+- **PIPELINE** — submitted/open, not accepted.
+- **PREPARED** — deliverable/application ready but not yet natively submitted.
 - **FORK** — transaction succeeded only in simulation/fork.
 - **PAPER** — calculated opportunity, not executed.
-- **REJECTED / OCCUPIED** — competitor won/claimed it or opportunity is no longer actionable.
+- **ARCHIVED / REJECTED / OCCUPIED** — no longer a current expected payout path.
 
-The project headline must always report CONFIRMED separately from every other state.
+The headline must always show CONFIRMED separately from every other state.
+
+## 6. Execution safety gates
+
+No live FLASH transaction until there is confirmed capital and the exact current-state route has deterministic simulation, conservative gas/fees/slippage, bounded failure loss, and positive net outcome. No private key/seed phrase in repo/CI; no fabricated users, wash volume, duplicate identities or prohibited activity.
