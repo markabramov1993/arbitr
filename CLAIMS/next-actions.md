@@ -1,10 +1,12 @@
 # Immediate bounty action queue — audited 2026-09-06
 
-1. Read the live RTC wallet balance/history and promote only actual received tokens to CONFIRMED.
-2. RustChain #16601: keep the two Sep 4 Type C email submissions in the review window; once an authenticated browser or external-comment permission is available, add public issue comments identifying them as the same existing submissions, not duplicate claims.
-3. Mova #91: monitor PR #257 and competitor #343; the branch now contains the required explicit event-topic fix. Respond immediately to maintainer review.
-4. Mermail/Superteam: preserve the already-submitted entry and PR #174; fix/edit submission metadata only through the authenticated browser without creating a second entry.
-5. ProofRoute: native-submit Germany Ideathon / suitable Germany grant forms once browser access returns; grant proceeds remain project-restricted.
-6. Search new funded low-competition tasks only after these acceptance queues are checked.
+1. Watch for acceptance/payment on **#13949, #1575, #1579 and #100**; promote only an explicit acceptance to RECEIVABLE and only a real wallet/cash receipt to CONFIRMED.
+2. **#16497:** wait for the material Sep 6 review request on the two 13 RTC draft-acceptance tranches; answer maintainer questions immediately, but do not send duplicate follow-ups.
+3. **RTC wallet:** re-run the live balance/history probe after any acceptance/payout signal. Last verified state: 0.0 RTC, 0 transactions.
+4. **Mova #91:** monitor PR #257 and competing PR #343; current branch includes explicit `pay/create_order/dispatch/refund` topics.
+5. **Mermail/Superteam:** monitor official PR #174 / proposal #173 and preserve the already-submitted Superteam entry; no duplicate submission.
+6. **#16601 Type C:** keep only as historical/low-probability because the lane has an earlier accepted Type C; do not spend follow-up bandwidth here without maintainer request.
+7. Search new funded work only after duplicate checks in GitHub comments and SENT mail.
+8. ProofRoute native submission waits for authenticated browser access; any grant remains project-restricted.
 
-Never count closed Lilly fallback work, bounty face value, simulated PnL, or an unverified wallet balance as capital.
+Never count closed Lilly fallback work, bounty face value, prize pools, simulated PnL or an unreceived token as seed capital.
