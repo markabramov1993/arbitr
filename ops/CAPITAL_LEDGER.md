@@ -1,41 +1,46 @@
 # PROFIT ENGINE — Capital Ledger
 
-Updated: **2026-09-06 audit**
+Updated: **2026-09-06 live audit**
 
-This ledger separates money actually received from receivables, open bounty pipeline and simulated trading PnL.
+This ledger separates money actually received from receivables, submitted pipeline, prepared work and simulated trading PnL.
 
 ## 1. Confirmed capital
 
-| Bucket | Confirmed amount | Evidence rule |
+| Bucket | Confirmed amount | Evidence |
 |---|---:|---|
-| Cash / stablecoin bounty payouts | **$0 confirmed** | Actual transfer, platform payout, or independently verifiable receipt only |
-| RTC | **LIVE PROBE REQUIRED** | RustChain wallet balance/history for `RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d` only |
-| DeFi execution profit | **$0 confirmed** | Settled on-chain net profit after all costs only |
+| Cash / stablecoin bounty payouts | **$0** | No accepted payment/transfer recovered |
+| RTC | **0.0 RTC** | Sep 6 RustChain live probe returned `amount_rtc: 0.0` and wallet history count `0` for `RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d` |
+| DeFi execution profit | **$0** | No settled live FLASH execution |
 
-Bounty labels, prize pools, emails sent, merged-looking simulations and fork PnL are not capital.
+**CONFIRMED seed capital = $0 + 0.0 RTC.**
 
-## 2. Active external earning pipeline
+Bounty labels, prize pools, sent emails, open PRs, fork results and simulated PnL are not capital.
 
-| Opportunity | Face value | State | Capital? |
-|---|---:|---|---|
-| RustChain #16601 — two distinct Type C packages | 15 RTC + 15 RTC | Submitted by allowed email route Sep 4; audited valid Sep 6; official review SLA 7 days | PIPELINE |
-| Mova Store #91 / PR #257 | $90 | Open/mergeable; Sep 6 branch corrected to explicit Soroban event-topic symbols; competing PR #343 exists | PIPELINE |
-| Mermail / Superteam | 500 USDC prize pool | Superteam entry submitted; upstream PR #174 open/mergeable; judged competition | PIPELINE |
-| Other RTC claims | mixed RTC | Submitted; acceptance/payment evidence not yet recovered | PIPELINE |
-| ProofRoute Germany opportunities | 3,000 USDG Ideathon pool / grant request 5,000 USDG | Prepared; native platform submission pending browser access | NOT YET SUBMITTED / restricted if grant |
+## 2. Closest submitted payout requests
 
-## 3. Removed from active expected income
+| Opportunity | Face value | State |
+|---|---:|---|
+| RustChain #13949 — README badge | 2 RTC | PIPELINE — clean claim emailed Sep 6; repo and no-prior-claim state verified |
+| RustChain #1575 — Contributor Registry | 3–5 RTC canonical-rate ambiguity | PIPELINE — no existing registry entry; direct issue write 403; complete registration emailed via documented fallback |
+| RustChain #1579 — contextual Elyan Labs README mention | 3 RTC | PIPELINE — real pre-existing `arbitr` repo updated; claim emailed Sep 6 |
+| RustChain #100 — first Discovery Mode claim | 2 RTC | PIPELINE — Beacon Skill discovery claim emailed Sep 6 after duplicate check |
+| RustChain #16497 — two article draft-acceptance tranches | 13 + 13 RTC | PIPELINE — two Sep 4 submissions; material Sep 6 follow-up asks only for draft acceptance; no reply yet |
+| Mova Store #91 / PR #257 | $90 | PIPELINE — open/mergeable; explicit Soroban topic fix added; competing PR #343 exists |
+| Mermail / Superteam | 500 USDC total prize pool | PIPELINE — entry submitted; PR #174 open; judged competition, not a receivable |
 
-- **Lilly batch — formerly $635 nominal:** all nine relevant upstream issues are now closed as completed with no acceptance evidence for our fallback work. Historical work only unless maintainers explicitly revive/accept it.
-- Stale mirrored bounty values and occupied/assigned tasks are not pipeline.
+## 3. Downgraded / archived
+
+- **RustChain #16601 Type C packages:** technically valid historical submissions, but thread evidence shows an earlier Type C email package was already accepted for the round. Treat our Type C lane as **OCCUPIED / low probability**, not a primary payout forecast.
+- **Lilly batch — formerly $635 nominal:** all nine relevant upstream issues are closed as completed with no acceptance evidence for our fallback work. **ARCHIVED** unless a maintainer explicitly reopens/accepts it.
+- Stale mirrored bounty values, assigned work and duplicate winner slots are not pipeline.
 
 ## 4. Capital ladder
 
-1. **BOOTSTRAP** — zero-cost bounties, grants, public CI/RPC and reproducible work.
-2. **CONFIRM RECEIPT** — verify cash/stablecoin/token arrival independently.
-3. **GAS RESERVE** — ring-fence first confirmed crypto/stablecoin funds for execution costs.
-4. **LIVE MICRO-EXECUTION** — only tiny controlled notional after deterministic simulation and full cost model.
-5. **FLASH-LIQUIDITY EXECUTION** — only when current-state execution remains positive under conservative fees/slippage/gas.
+1. **BOOTSTRAP** — zero-capital, funded external work only.
+2. **CONFIRM RECEIPT** — independently verify the first token/cash arrival.
+3. **GAS RESERVE** — ring-fence confirmed crypto/stablecoin for execution costs.
+4. **LIVE MICRO-EXECUTION** — only after deterministic current-state simulation with fees, gas and slippage.
+5. **FLASH-LIQUIDITY EXECUTION** — only when exact execution remains net-positive under conservative assumptions.
 6. **SCALE FROM REALIZED PROFIT** — never from bounty face value or paper PnL.
 
 ## 5. Accounting states
@@ -48,8 +53,6 @@ Bounty labels, prize pools, emails sent, merged-looking simulations and fork PnL
 - **PAPER** — calculated opportunity, not executed.
 - **ARCHIVED / REJECTED / OCCUPIED** — no longer a current expected payout path.
 
-The headline must always show CONFIRMED separately from every other state.
+## 6. Execution safety gate
 
-## 6. Execution safety gates
-
-No live FLASH transaction until there is confirmed capital and the exact current-state route has deterministic simulation, conservative gas/fees/slippage, bounded failure loss, and positive net outcome. No private key/seed phrase in repo/CI; no fabricated users, wash volume, duplicate identities or prohibited activity.
+No live FLASH transaction until confirmed capital exists and the exact current-state route has deterministic simulation, conservative gas/fees/slippage, bounded failure loss and positive net outcome. No private key/seed phrase in repo/CI; no fabricated users, wash volume, duplicate identities or prohibited activity.
