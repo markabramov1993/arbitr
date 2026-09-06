@@ -1,97 +1,97 @@
 # FLASH bounty / seed-capital ledger — audited 2026-09-06
 
-Purpose: obtain **real external rewards first**. Only money/tokens actually received become FLASH seed capital. Face value, prize pools, emails, open PRs and simulated PnL are never counted as cash.
+Purpose: obtain **real external rewards first**. Only money/tokens actually received become FLASH seed capital. Face value, prize pools, sent emails, open PRs and simulated PnL are never counted as cash.
 
 ## Headline
 - **Confirmed USD/stablecoin bounty cash: $0**
+- **Confirmed RTC: 0.0 RTC**
 - **Confirmed DeFi profit: $0**
-- **RTC:** live balance/history probe refreshed Sep 6; use RustChain wallet data as the only authority for confirmed RTC.
 - RTC wallet: `RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d`
+- Sep 6 live probe: balance HTTP 200 / `amount_rtc: 0.0`; history HTTP 200 / **0 transactions**.
 
-## 1. Closest explicit pay-on-acceptance path — RustChain
+## 1. Shortest current payout requests
 
-### #16601 Distribution Packages
-Official issue states `paid: true`, review within 7 days, and accepted packages are paid.
+### RustChain #13949 — README badge — 2 RTC
+- Existing real repo: `markabramov1993/arbitr`.
+- RustChain badge verified in README.
+- No prior `markabramov1993` public claim found before submission.
+- Complete claim emailed Sep 6 through documented 403 fallback.
+- **State: PIPELINE.**
 
-Existing Sep 4 submissions re-audited Sep 6:
-1. **Type C — RIP-302 Agent Economy Shorts kit — 15 RTC**
-   - `bounties/rip302-agent-economy-shorts-kit/`
-   - ≤60s timed script, 9:16 storyboard, metadata and SOURCES.
-   - Key claims independently rechecked against current `Scottcjn/Rustchain/rip302_agent_economy.py` (5% fee, escrow, lifecycle, settlement, reputation).
-2. **Type C — Beacon Liveness Shorts kit — 15 RTC**
-   - `earn/shorts/beacon-liveness/`
-   - 60s script, 9:16 storyboard, metadata and SOURCES.
-   - Commands/Atlas heartbeat/signed bounty metadata rechecked against current `Scottcjn/beacon-skill`.
+### Contributor Registry #1575 — canonical 3–5 RTC ambiguity
+- `markabramov1993` absent from `Scottcjn/contributors/CONTRIBUTORS.yml` when checked.
+- Direct issue creation returned `403 Resource not accessible by integration`.
+- Complete registration emailed Sep 6 and requested filing on our behalf.
+- Issue title and current registry/template disagree on 3 vs 5 RTC, so do not select the higher number ourselves.
+- **State: PIPELINE.**
 
-Both were submitted through the issue's allowed **email** route. A Sep 6 attempt to add public queue comments failed with GitHub App `403`; do not resend duplicate email during the stated 7-day review window. When authenticated browser write access returns, add comments explicitly identifying them as the same existing submissions, not duplicate reward claims.
+### RustChain #1579 — contextual Elyan Labs mention — 3 RTC
+- Existing `arbitr` repo predates the bounty and contains real original work.
+- README received a dedicated contextual Elyan Labs tooling section in commit `c43c34329ae8076d60a720ca8a65472cf6f063dc`.
+- Claim emailed Sep 6 through documented fallback after duplicate check.
+- **State: PIPELINE; pool availability still requires maintainer acceptance.**
 
-Other historical RTC claims remain **PIPELINE** until each is individually accepted/paid. Do not infer the wallet balance from their nominal totals.
+### RustChain #100 — Discovery Mode — 2 RTC
+- First-discovery claim for `Scottcjn/beacon-skill` emailed Sep 6 after checking SENT mail and public claim history for a duplicate.
+- Submission explains actual inspected use: persistent agent identity, Atlas liveness and signed envelopes.
+- Includes RTC wallet and AI disclosure; requests maintainer filing because external GitHub write access is 403.
+- **State: PIPELINE.**
+
+### RustChain #16497 — two draft-acceptance tranches — 13 + 13 RTC
+- Two long-form tutorials originally submitted Sep 4.
+- Sep 6 audit found and fixed a real broken dual-stdin shell/Python example in the Beacon tutorial; fix commit `600401ec7d1eaa0c56a1b2bc6de508c28f98a787`.
+- One material follow-up asks for review only of the **13 RTC draft-acceptance tranche per article** under the pre-Sep-8 submission state.
+- The later 20+20 publication tranches are not claimed/receivable without qualifying Live-URLs and persistence checks.
+- **State: PIPELINE.**
 
 ## 2. Mermail / Superteam — submitted competition
-
-- Listing: Build and Demo a Mermail Agent Skill.
-- Advertised prize pool: **500 USDC**.
+- Advertised prize pool: **500 USDC total**.
 - Superteam entry was submitted; prior UI verification showed `Edit Submission` and one credit consumed.
-- Official PR: `Nudgen-Marketing/mermail-skills#174`.
-- PR state Sep 6: open, mergeable, no maintainer reviews/comments.
-- Controlled Mermail live run completed: legitimate opportunity identified, malicious prompt-injection/payment instruction rejected, duplicate check performed, no unauthorized send/payment, state remained opportunity-only.
-- Demo video: `https://x.com/LeadsOleg/status/2096249643604570579`
-- Tagged post: `https://x.com/LeadsOleg/status/2096354167971271154`
-- Upstream fork workflows currently show `action_required` with no validation jobs, consistent with maintainer approval being required for external-fork Actions rather than a demonstrated code failure.
+- Official PR: `Nudgen-Marketing/mermail-skills#174` — latest Sep 6 check: open, no maintainer feedback.
+- Companion proposal: `Nudgen-Marketing/mermail-skills#173` — no maintainer reply at latest check.
+- Controlled live Mermail run completed safely; no fabricated send/payment/settlement.
+- **State: PIPELINE, not RECEIVABLE.**
 
-Accounting: **PIPELINE**, not receivable or confirmed.
-
-## 3. Mova Labs #91 — live $90 path, now competitive
-
-- Issue #91 remains open: **$90**.
-- Our upstream PR #257 remains open and mergeable.
-- Sep 6 audit found an important flaw in the original submission: comparing emitted events to `.to_xdr()` of the same event structs did not prove that the first topic matched the JS indexer's short symbols.
-- Current Soroban behavior defaults a contractevent fixed topic to the struct name in snake_case, while Mova's JS decoder expects `pay`.
-- Our fork branch was corrected to pin explicit topics:
+## 3. Mova Labs #91 — live $90 path, competitive
+- Issue #91 nominal bounty: **$90**.
+- PR #257 remains open/mergeable at latest Sep 6 check.
+- Audit fixed a substantive flaw by explicitly pinning Soroban fixed event topics:
   - `PaymentReceived` -> `pay`
   - `OrderCreated` -> `create_order`
   - `OrderShipped` -> `dispatch`
   - `OrderRefunded` -> `refund`
-- PR #257 now has 2 commits / 2 changed files and remains mergeable.
-- Competing PR #343 exists and covers overlapping/broader work, so payout probability is lower than previously assumed.
-- Upstream PR-body mutation still returns GitHub integration `403`; update/explain through browser when available.
+- Competing PR #343 covers overlapping/broader work.
+- Material update email already sent; no duplicate follow-up until new review/state change.
+- **State: PIPELINE.**
 
-Accounting: **PIPELINE**.
+## 4. Downgraded / occupied
+### RustChain #16601 Type C
+- Our two Sep 4 Type C packages remain technically valid historical submissions.
+- Thread history shows an earlier Type C email package was already accepted for the round.
+- Therefore this is **OCCUPIED / low probability**, not the main first-payout forecast.
 
-## 4. Lilly work — archived from active expected income
-
-The nine tasks previously summarized as **$635 nominal** are now all closed upstream as `completed`:
+## 5. Archived from active expected income
+### Lilly batch — formerly $635 nominal
+All nine relevant Lilly issues are closed upstream as completed with no acceptance evidence for our fallback work:
 - lily-contracts #321, #323, #324;
 - agentlily-runtime #241, #242, #243, #247, #248, #253.
 
-Our branches/patches/email fallbacks remain useful historical work, but there is **no evidence they were accepted for payment**. Do not carry $635 as active pending money. Re-open only if Lilly/GrantFox explicitly replies with acceptance/payment or requests the work.
+Preserve the work historically, but do not carry $635 as active pending money unless Lily/GrantFox explicitly accepts it.
 
-Accounting: **ARCHIVED / no acceptance evidence**.
+## 6. Other older paths
+- Mova #53 — $45 nominal; no acceptance evidence.
+- Mova #60 — $50 nominal; no acceptance evidence.
+- Claude Builders #1 — $50 nominal; no acceptance evidence.
+- RustChain #2271 miner dry-run was already submitted Sep 3; **do not duplicate**.
+- Historical RTC claims remain PIPELINE unless individually accepted and then received.
 
-## 5. Other older bounty paths
+## 7. ProofRoute / Germany opportunities
+Prepared project assets remain available for native Germany-eligible submissions when authenticated browser access returns. Any awarded grant is restricted ProofRoute project funding and is not automatically FLASH trading seed capital.
 
-- Mova #53 — $45 nominal; patch/follow-up sent, no acceptance evidence.
-- Mova #60 — $50 nominal; fallback sent, no acceptance evidence.
-- Claude Builders #1 — $50 nominal; fallback sent, no acceptance evidence.
-- Expensify help-wanted access request — no accepted assignment/payout evidence.
-- Security leads — no reward counted without explicit scope/acceptance.
-
-These remain lower priority than already-submitted RustChain, Mova #91 and Mermail.
-
-## 6. ProofRoute / Germany opportunities
-
-Prepared in `earn/germany-ideathon/`:
-- `README.md`
-- `PITCH.md`
-- `GRANT_APPLICATION.md`
-
-Germany Ideathon and suitable Germany grant forms should be submitted natively when authenticated browser access returns. Any awarded grant is **restricted ProofRoute project funding**, not free FLASH trading capital.
-
-## 7. Operating rules
-
-1. No duplicate claims/submissions.
-2. Verify issue state, competition and funding before new work.
-3. Prefer explicit pay-on-acceptance / platform-backed opportunities.
-4. Do not follow up inside a published review SLA unless there is a material change or maintainer request.
-5. `CONFIRMED` requires an actual receipt; `RECEIVABLE` requires explicit acceptance; everything else stays `PIPELINE`, `PREPARED` or `ARCHIVED`.
-6. No live trading until confirmed seed capital exists and the exact route passes current deterministic cost-aware validation.
+## 8. Operating rules
+1. Search issue state/comments and SENT mail before every new claim.
+2. No duplicate claims or duplicate follow-up emails.
+3. Prefer funded, open, unoccupied, explicit payout paths.
+4. `CONFIRMED` requires actual receipt; `RECEIVABLE` requires explicit acceptance; otherwise use PIPELINE/PREPARED/ARCHIVED/OCCUPIED.
+5. Re-run RTC live balance/history after any acceptance/payment signal.
+6. No live FLASH execution before confirmed seed capital and deterministic current-state cost-aware validation.
