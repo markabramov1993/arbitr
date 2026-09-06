@@ -1,40 +1,43 @@
-# FLASH bounty status — 2026-09-05 final
+# FLASH bounty status — audited 2026-09-06
 
-## Cleared capital
+## Capital truth
+- Confirmed USD/stablecoin bounty cash: **$0**.
+- RTC: live wallet probe refreshed on Sep 6; use the resulting RustChain balance/history as the only authority for confirmed RTC.
+- Bounty face values, prize pools, closed fallback work and simulated PnL are not capital.
 
-- Cleared cash: **$0**
-- Cleared RTC: **0 RTC**
-- Rule remains: only actually accepted/paid rewards become FLASH execution capital.
+## Mermail / Superteam — submitted
+- Advertised prize pool: **500 USDC**.
+- Superteam entry was submitted and previously verified by the UI showing `Edit Submission`; one credit was consumed.
+- Official PR: https://github.com/Nudgen-Marketing/mermail-skills/pull/174 — open, mergeable, no maintainer review yet.
+- Demo video: https://x.com/LeadsOleg/status/2096249643604570579
+- Tagged X post: https://x.com/LeadsOleg/status/2096354167971271154
+- Controlled Mermail run completed successfully; malicious prompt-injection/payment instructions were rejected and reward state stayed opportunity-only.
+- Accounting: **PIPELINE**, not receivable/confirmed.
 
-## Superteam / Mermail — SUBMITTED
+## RustChain — closest explicit pay-on-acceptance queue
+- Official #16601 is open and states review within 7 days; accepted packages are paid.
+- Type C RIP-302 package and Type C Beacon-liveness package were submitted by email on Sep 4 and re-audited Sep 6 against the current source and bounty requirements.
+- RTC wallet: `RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d`.
+- External GitHub App comments currently return 403, so the existing email submissions remain the valid submission records; do not duplicate-email during the stated review window.
 
-- Opportunity: **Build and Demo a Mermail Agent Skill**
-- Advertised prize pool: **500 USDC**
-- Superteam state: **submitted** (UI now shows `Edit Submission`; one credit consumed; submission count increased 60 -> 61)
-- Official upstream PR: https://github.com/Nudgen-Marketing/mermail-skills/pull/174
-- Official companion proposal: https://github.com/Nudgen-Marketing/mermail-skills/issues/173
-- X demo video (2:04): https://x.com/LeadsOleg/status/2096249643604570579
-- X tagged post (`@Mermailapp`): https://x.com/LeadsOleg/status/2096354167971271154
-- Saved Superteam fields after update:
-  - Submission link -> PR #174
-  - Tweet link -> tagged X post
-  - Video demonstration -> 2:04 X video
-- Controlled live Mermail run completed successfully: legitimate opportunity detected; prompt-injection/payment instruction rejected; duplicate check performed; no external send/payment; reward remained opportunity-only (not accepted, not paid).
-- Upstream PR state: open; no maintainer review/comment yet at latest check.
+## Mova #91 — live but competitive
+- Nominal bounty: **$90**.
+- PR #257: open, mergeable.
+- Sep 6 audit found the original branch did not actually pin the short event symbols expected by the JS indexer.
+- Branch corrected to explicit Soroban fixed topics: `pay`, `create_order`, `dispatch`, `refund`; PR now has 2 commits / 2 changed files.
+- Competing PR #343 exists with overlapping/broader work. Keep this as PIPELINE, not near-certain payment.
 
-## Fresh Lilly work completed today
+## Lilly batch — archived, not active money
+The nine Lilly issues formerly totaling **$635 nominal** are now all closed upstream as completed, with no evidence that our fallback branches/emails were accepted. Preserve the work historically, but remove the $635 from active expected income unless Lilly/GrantFox explicitly replies with acceptance/payment.
 
-Nominal pipeline remains **$635 pending**, cleared **$0**. Funding/acceptance still requires proof; do not count nominal bounty labels as cash.
+## ProofRoute
+- Germany Ideathon package and pitch are prepared.
+- A Germany grant application draft requests 5,000 USDG against project milestones.
+- These are future platform submissions; grant funds, if awarded, are restricted ProofRoute project funding and are not FLASH trading seed capital.
 
-## Existing recovered pipeline
-
-- Mova Labs #91: nominal $90; upstream PR #257 remains the main live code-review path.
-- Mova #53: nominal $45; follow-up already sent.
-- Claude Builders #1: nominal $50; fallback already sent.
-- RTC explicit numeric claims recovered: **154 RTC nominal pending**.
-
-## Next platform-backed targets
-
-- Flint — `Post: Why Flint Beats Building Your Own Prop AMM`, **1,500 USDC total**, global. Requirements verified: English X post/thread/video, tag `@flint_trade_`, link `https://flint.trade/`; no deposit required. Competition is already high, so only a differentiated professional market-maker thread is worth submitting.
-- Aeonian — 500 USDC content bounty; inspect after Flint.
-- Continue avoiding Manic (requires real-money deposit/trading), Canada-only listings, artificial token activity, and crowded/assigned GitHub bounties.
+## Current order
+1. Verify live RTC balance/history.
+2. Push already-submitted RustChain work through review without spam or duplicate claims.
+3. Monitor/respond to Mova #257 and Mermail #174.
+4. Native-submit ProofRoute when authenticated browser access returns.
+5. Add new funded tasks only when they improve expected payout time/quality.
