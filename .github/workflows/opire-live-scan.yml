@@ -1,0 +1,63 @@
+name: Opire Live Reward Scan
+
+on:
+  push:
+    paths:
+      - '.github/workflows/opire-live-scan.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read public Opire rewards API
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import urllib.request
+
+          url = 'https://api.opire.dev/rewards'
+          req = urllib.request.Request(url, headers={'User-Agent': 'FLASH-opire-live-scan/1.0'})
+          with urllib.request.urlopen(req, timeout=30) as r:
+              raw = r.read()
+              print(f'HTTP={r.status}')
+              print(f'BYTES={len(raw)}')
+              data = json.loads(raw)
+
+          rows = data if isinstance(data, list) else data.get('rewards', data.get('items', data.get('data', [])))
+          if not isinstance(rows, list):
+              print('TOP_LEVEL=' + json.dumps(data, ensure_ascii=False)[:5000])
+              raise SystemExit(0)
+
+          available = []
+          for row in rows:
+              claimers = row.get('claimer_usernames') or row.get('claimers') or []
+              trying = row.get('trying_usernames') or row.get('trying') or []
+              status = str(row.get('status') or row.get('state') or '').lower()
+              amount = row.get('amount_usd', row.get('amount', row.get('reward', 0)))
+              title = row.get('title') or row.get('issue_title') or ''
+              gh = row.get('url') or row.get('github_url') or row.get('issue_url') or ''
+              if not claimers and not trying and status not in {'claimed','paid','closed','cancelled','canceled'}:
+                  available.append((float(amount or 0), title, gh, row))
+
+          available.sort(key=lambda x: x[0], reverse=True)
+          print(f'TOTAL_ROWS={len(rows)}')
+          print(f'UNCLAIMED_ROWS={len(available)}')
+          for amount, title, gh, row in available[:50]:
+              langs = row.get('programming_languages') or row.get('languages') or []
+              print('REWARD=' + json.dumps({
+                  'amount_usd': amount,
+                  'title': title,
+                  'url': gh,
+                  'languages': langs,
+                  'id': row.get('id'),
+                  'created_at': row.get('created_at'),
+                  'status': row.get('status') or row.get('state'),
+              }, ensure_ascii=False, sort_keys=True))
+          PY
