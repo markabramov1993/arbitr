@@ -1,6 +1,6 @@
 # Elyan / RustChain submission inventory — canonical dedupe ledger
 
-Updated: **2026-09-06**
+Updated: **2026-09-08**
 
 Purpose: this file is the canonical duplicate-prevention register for work submitted by `markabramov1993` through GitHub or the documented `sophia.eagent@gmail.com` fallback.
 
@@ -10,13 +10,14 @@ Purpose: this file is the canonical duplicate-prevention register for work submi
 - A repeated email does **not** create a second claim.
 - When issue title/body amounts conflict, use the **title / maintainer-confirmed rate** until a maintainer resolves the mismatch.
 - `PIPELINE` means submitted but not accepted. `RECEIVABLE` requires explicit acceptance. `CONFIRMED` requires an actual wallet receipt.
-- Live wallet authority as of Sep 6: `RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d` = **0.0 RTC, 0 transactions**.
+- Live wallet authority as of Sep 8: `RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d` = **0.0 RTC, 0 transactions**.
 
 ## Canonical unique submissions
 
 | Bounty | Deliverable / lane | Canonical reward basis | First sent | Current state | Dedupe / acceptance note |
 |---|---|---:|---|---|---|
 | #100 | Discovery Mode — Beacon Skill | 2 RTC | 2026-09-06 | PIPELINE | One claim only; no maintainer reply yet |
+| #1102 | BoTTube functional bug — JS SDK `health()` response contract mismatches live `/health`, breaks dashboard health check | title/body rate conflict; maintainer decides | 2026-09-08 | PIPELINE | Public report `earn/bottube-1102-js-sdk-health-contract.md`; live CI run 34266991492; direct upstream issue blocked 403; one fallback email only |
 | #13949 | RustChain badge in `markabramov1993/arbitr` README | 2 RTC | 2026-09-04 | PIPELINE | **Duplicate email Sep 6 corrected by administrative dedupe notice; ONE claim only** |
 | #1575 | Elyan Contributor Registry registration | 3 RTC title / 5 RTC current template | 2026-09-06 | PIPELINE | No pre-existing registry entry; maintainer must resolve canonical amount |
 | #1579 | Contextual Elyan Labs tooling mention in existing `arbitr` README | 3 RTC | 2026-09-06 | PIPELINE | Commit `c43c34329ae8076d60a720ca8a65472cf6f063dc`; one claim |
@@ -53,10 +54,8 @@ It explicitly instructs Elyan Labs to count **one claim only** for #13949, #1244
 
 ## Other active non-Elyan paths
 
-These belong in the global FLASH ledger, not as Elyan claims:
-
-- **Mova #91 / PR #257 — $90 nominal** — open/mergeable, corrected event topics; competing PR #343.
-- **Mermail / Superteam — 500 USDC total prize pool** — submission filed; official PR #174 and proposal #173; judged competition.
+- **Mova #91 / PR #257 — ARCHIVED Sep 8** — upstream issue closed by maintainer commit `0ec1ab0ddde4cf5d880709efd423fda06f6f6862`; no acceptance/payment for our PR.
+- **Mermail / Superteam — 500 USDC total prize pool** — submission filed; official PR #174 open/mergeable/no maintainer feedback at Sep 8 check.
 - **Lilly batch — formerly $635 nominal** — ARCHIVED because all nine upstream tasks closed with no acceptance evidence for our fallback work.
 
 ## Mandatory pre-submit gate
