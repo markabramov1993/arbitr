@@ -32,6 +32,8 @@ but the live `https://bottube.ai/health` endpoint returns a different object sha
 
 Neither `status` nor `timestamp` exists in the live response. TypeScript callers therefore compile successfully when reading `result.status` or `result.timestamp`, but those values are `undefined` at runtime.
 
+This is not only a theoretical type mismatch: the repository's own dashboard consumes `result.status` and therefore treats a healthy live server as unhealthy.
+
 ## Live reproduction
 
 A read-only GitHub Actions smoke run queried the documented public endpoint on 2026-09-08:
@@ -46,11 +48,9 @@ No authentication, writes, fuzzing, or destructive requests were used.
 
 ## Source evidence
 
-Current upstream file:
+### 1. Official JS SDK declares a non-existent live shape
 
-`Scottcjn/bottube/js-sdk/src/client.ts`
-
-contains:
+Current upstream file `Scottcjn/bottube/js-sdk/src/client.ts` contains:
 
 ```ts
 /** Check API health. */
@@ -59,20 +59,56 @@ async health(): Promise<{ status: string; timestamp: number }> {
 }
 ```
 
-The current web API docs also document `/health` as a public health endpoint, while the live server payload is the object shown above.
+### 2. The SDK test reinforces the stale contract instead of the live one
+
+Current `js-sdk/tests/client.test.ts` mocks:
+
+```ts
+mockFetch.mockResolvedValueOnce(ok({ status: 'healthy', timestamp: 123 }));
+const res = await client.health();
+expect(res.status).toBe('healthy');
+```
+
+So the SDK test suite cannot detect deployment/API drift here because its fixture encodes the same stale shape as the client type.
+
+### 3. The bundled dashboard is functionally affected
+
+Current `bottube-dashboard/src/index.ts` does:
+
+```ts
+const result = await this.client.health();
+spinner.succeed(kleur.green(`API Status: ${result.status}`));
+return result.status === 'healthy';
+```
+
+Against the verified live response this renders `API Status: undefined` and returns `false` even though the server returned HTTP 200 with `ok: true`.
+
+### 4. README example is also stale
+
+The current `js-sdk/README.md` health example destructures the missing field:
+
+```js
+const { status } = await client.health();
+```
+
+The current web API docs document `/health` as a public health endpoint; the live server payload is the object shown above.
 
 ## Impact
 
-This is a runtime contract bug for TypeScript consumers. For example:
+There are at least two concrete consumer failures:
+
+1. TypeScript code like this compiles but fails at runtime:
 
 ```ts
 const health = await client.health();
 console.log(health.status.toUpperCase());
 ```
 
-is accepted by TypeScript because the SDK promises `status: string`, but fails at runtime because `health.status` is actually `undefined`.
+because `health.status` is `undefined`.
 
-The same applies to `timestamp`.
+2. The repository's own `BoTTubeDashboard.healthCheck()` reports a healthy production API as unhealthy because it tests `result.status === 'healthy'` rather than the live `result.ok` field.
+
+The same stale SDK contract also exposes a non-existent `timestamp` field.
 
 ## Expected
 
@@ -98,22 +134,25 @@ async health(): Promise<HealthResponse> {
 }
 ```
 
-A focused SDK test should mock the current live payload and assert the public return shape.
+The focused SDK test should mock the actual live response. The dashboard should use `result.ok` for its boolean health result and display `result.version` or a normalized `ok` status.
 
 ## Actual
 
-The SDK advertises two fields that the server does not return and omits every field that the server does return.
+- SDK promises `status` and `timestamp`, neither of which is returned by production.
+- SDK test mocks the wrong shape, so it passes despite the live incompatibility.
+- SDK README teaches consumers to read the missing `status` field.
+- Bundled dashboard uses the missing field and returns `false` for a healthy live API.
 
 ## Duplicate check
 
-Before filing, searches were run over current `Scottcjn/bottube` issues and PRs for combinations of `health`, `timestamp`, `status`, `js-sdk`, and `TypeScript`. No existing report or PR for this response-contract mismatch was found.
+Before filing, searches were run over current `Scottcjn/bottube` issues and PRs for combinations of `health`, `timestamp`, `status`, `js-sdk`, `TypeScript`, and dashboard health. No existing report or PR for this response-contract mismatch was found.
 
 ## Environment
 
 - Live API: `https://bottube.ai/health`
 - Verification runner: GitHub-hosted Ubuntu 24.04
 - Upstream source: `Scottcjn/bottube` main
-- Client affected: official `js-sdk/src/client.ts`
+- Affected code: `js-sdk/src/client.ts`, `js-sdk/tests/client.test.ts`, `js-sdk/README.md`, `bottube-dashboard/src/index.ts`
 
 ## Disclosure
 
