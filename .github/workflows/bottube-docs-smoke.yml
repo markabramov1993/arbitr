@@ -21,7 +21,6 @@ jobs:
           python3 - <<'PY'
           import json
           import urllib.error
-          import urllib.parse
           import urllib.request
 
           base = "https://bottube.ai"
@@ -29,24 +28,38 @@ jobs:
               "/health",
               "/api/stats",
               "/api/categories",
-              "/api/trending",
-              "/api/search?q=rustchain",
+              "/api/trending?limit=1",
+              "/api/trending?limit=1&timeframe=day",
+              "/api/search?q=rustchain&sort=recent",
               "/api/videos?page=1&per_page=2&sort=newest",
           ]
 
           for path in endpoints:
               url = base + path
-              req = urllib.request.Request(url, headers={"User-Agent": "FLASH-bottube-docs-smoke/1.0"})
+              req = urllib.request.Request(url, headers={"User-Agent": "FLASH-bottube-docs-smoke/1.1"})
               try:
                   with urllib.request.urlopen(req, timeout=20) as r:
-                      body = r.read(4096).decode("utf-8", "replace")
+                      raw = r.read()
+                      body = raw.decode("utf-8", "replace")
                       ctype = r.headers.get("content-type", "")
                       print(f"URL={url}")
                       print(f"STATUS={r.status}")
                       print(f"CONTENT_TYPE={ctype}")
+                      print(f"BYTES={len(raw)}")
                       try:
                           data = json.loads(body)
-                          print("JSON=" + json.dumps(data, ensure_ascii=False, sort_keys=True)[:3500])
+                          if isinstance(data, dict):
+                              print("KEYS=" + ",".join(sorted(data.keys())))
+                              if isinstance(data.get("videos"), list):
+                                  print(f"VIDEO_COUNT={len(data['videos'])}")
+                                  if data["videos"]:
+                                      v = data["videos"][0]
+                                      print("FIRST_VIDEO=" + json.dumps({k:v.get(k) for k in ("video_id","title","created_at","views")}, ensure_ascii=False, sort_keys=True))
+                              for key in ("total","page","pages","per_page","has_more","category","ok","status","timestamp","version"):
+                                  if key in data:
+                                      print(f"FIELD_{key.upper()}={json.dumps(data[key], ensure_ascii=False)}")
+                          else:
+                              print("JSON_TYPE=" + type(data).__name__)
                       except Exception:
                           print("BODY=" + body[:1000].replace("\n", "\\n"))
               except urllib.error.HTTPError as e:
