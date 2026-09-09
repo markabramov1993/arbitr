@@ -1,0 +1,53 @@
+name: RustChain Wallet Proof
+
+on:
+  push:
+    paths:
+      - '.github/workflows/rustchain-wallet-proof.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Query official RustChain wallet API
+        shell: bash
+        env:
+          MINER_ID: RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d
+        run: |
+          set -euo pipefail
+          base='https://rustchain.org/wallet'
+          echo '=== BALANCE ==='
+          curl --fail --silent --show-error --max-time 20 "$base/balance?miner_id=$MINER_ID" | tee balance.json
+          echo
+          echo '=== HISTORY ==='
+          curl --fail --silent --show-error --max-time 20 "$base/history?miner_id=$MINER_ID" | tee history.json
+          echo
+      - name: Parse evidence
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for name in ('balance.json','history.json'):
+              p=Path(name)
+              raw=p.read_text(encoding='utf-8')
+              print(name.upper(), raw)
+              try:
+                  obj=json.loads(raw)
+              except Exception as e:
+                  raise SystemExit(f'{name}: invalid JSON: {e}')
+              print(f'{name}: JSON_OK type={type(obj).__name__}')
+          PY
+      - name: Upload wallet evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustchain-wallet-proof
+          path: |
+            balance.json
+            history.json
+          retention-days: 14
