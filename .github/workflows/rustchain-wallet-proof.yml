@@ -14,40 +14,82 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Query official RustChain wallet API
+      - name: Query official RustChain wallet and payout APIs
         shell: bash
         env:
-          MINER_ID: RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d
+          WALLET_ID: RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d
         run: |
-          set -euo pipefail
-          base='https://rustchain.org/wallet'
-          echo '=== BALANCE ==='
-          curl --fail --silent --show-error --max-time 20 "$base/balance?miner_id=$MINER_ID" | tee balance.json
-          echo
-          echo '=== HISTORY ==='
-          curl --fail --silent --show-error --max-time 20 "$base/history?miner_id=$MINER_ID" | tee history.json
-          echo
-      - name: Parse evidence
+          set -u
+          base='https://rustchain.org'
+
+          fetch() {
+            name="$1"; url="$2"
+            echo "=== $name ==="
+            code=$(curl --silent --show-error --max-time 30 -o "$name.json" -w '%{http_code}' "$url" || echo CURL_ERROR)
+            echo "$code" | tee "$name.status"
+            cat "$name.json" 2>/dev/null || true
+            echo
+          }
+
+          fetch balance "$base/wallet/balance?miner_id=$WALLET_ID"
+          fetch history "$base/wallet/history?miner_id=$WALLET_ID&limit=100"
+          fetch payouts "$base/payouts.json"
+          fetch miners "$base/api/miners"
+
+      - name: Parse wallet and payout evidence
         shell: bash
+        env:
+          WALLET_ID: RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d
         run: |
           python3 - <<'PY'
           import json
           from pathlib import Path
-          for name in ('balance.json','history.json'):
-              p=Path(name)
-              raw=p.read_text(encoding='utf-8')
-              print(name.upper(), raw)
+
+          wallet = 'RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d'
+          for name in ('balance','history','payouts','miners'):
+              status = Path(f'{name}.status').read_text(encoding='utf-8').strip() if Path(f'{name}.status').exists() else 'missing'
+              raw = Path(f'{name}.json').read_text(encoding='utf-8', errors='replace') if Path(f'{name}.json').exists() else ''
+              print(f'{name.upper()}_HTTP={status}')
+              print(f'{name.upper()}_HAS_WALLET={str(wallet.lower() in raw.lower()).lower()}')
+              if name in ('balance','history'):
+                  print(f'{name.upper()}_BODY={raw[:2000]}')
               try:
                   obj=json.loads(raw)
+                  print(f'{name.upper()}_JSON_OK=true TYPE={type(obj).__name__}')
               except Exception as e:
-                  raise SystemExit(f'{name}: invalid JSON: {e}')
-              print(f'{name}: JSON_OK type={type(obj).__name__}')
+                  print(f'{name.upper()}_JSON_OK=false ERROR={e}')
+
+          payout_raw = Path('payouts.json').read_text(encoding='utf-8', errors='replace') if Path('payouts.json').exists() else ''
+          matches=[]
+          try:
+              data=json.loads(payout_raw)
+              def walk(x, path='$'):
+                  if isinstance(x, dict):
+                      if wallet.lower() in json.dumps(x, ensure_ascii=False).lower():
+                          matches.append((path,x))
+                      for k,v in x.items(): walk(v, f'{path}.{k}')
+                  elif isinstance(x, list):
+                      for i,v in enumerate(x): walk(v, f'{path}[{i}]')
+              walk(data)
+          except Exception:
+              pass
+          print(f'PAYOUT_MATCH_COUNT={len(matches)}')
+          for path,obj in matches[:20]:
+              print('PAYOUT_MATCH', path, json.dumps(obj, ensure_ascii=False)[:3000])
           PY
+
       - name: Upload wallet evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: rustchain-wallet-proof
           path: |
             balance.json
+            balance.status
             history.json
+            history.status
+            payouts.json
+            payouts.status
+            miners.json
+            miners.status
           retention-days: 14
