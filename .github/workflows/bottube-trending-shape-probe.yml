@@ -1,0 +1,38 @@
+name: BoTTube Trending Response Shape Probe
+
+on:
+  push:
+    paths:
+      - '.github/workflows/bottube-trending-shape-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read public trending JSON shape
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, urllib.request
+          url='https://bottube.ai/api/trending?limit=3'
+          req=urllib.request.Request(url,headers={'User-Agent':'FLASH-read-only-contract-probe/1.0'})
+          with urllib.request.urlopen(req,timeout=20) as r:
+              body=r.read()
+              print('STATUS='+str(r.status))
+          data=json.loads(body)
+          print('TOP_LEVEL_KEYS='+json.dumps(sorted(data.keys())))
+          print('HAS_TOTAL='+str('total' in data))
+          print('HAS_PAGE='+str('page' in data))
+          print('HAS_PER_PAGE='+str('per_page' in data))
+          print('HAS_HAS_MORE='+str('has_more' in data))
+          videos=data.get('videos',[])
+          print('VIDEO_COUNT='+str(len(videos)))
+          if videos:
+              print('FIRST_VIDEO_KEYS='+json.dumps(sorted(videos[0].keys())))
+          PY
