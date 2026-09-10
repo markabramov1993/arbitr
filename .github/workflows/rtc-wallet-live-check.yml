@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 # Live balance probe refreshed 2026-09-10 after #1102 acceptance hold elapsed.
-# Refresh token: 2026-09-10T14:12+02:00
+# Refresh token: 2026-09-10T22:46+02:00
 jobs:
   check:
     runs-on: ubuntu-latest
