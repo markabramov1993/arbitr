@@ -1,0 +1,88 @@
+name: Build PoA Type B Thumbnails
+
+on:
+  push:
+    paths:
+      - '.github/workflows/poa-typeb-thumbnails.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Pillow
+        run: python -m pip install --disable-pip-version-check pillow
+      - name: Generate original 1280x720 thumbnails
+        shell: bash
+        run: |
+          python - <<'PY'
+          from PIL import Image, ImageDraw, ImageFont
+          from pathlib import Path
+
+          out = Path('earn/poa-video-kit')
+          bold = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 72)
+          medium = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 38)
+          regular = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 30)
+          small = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 24)
+
+          def base():
+              im = Image.new('RGB', (1280, 720), (13, 17, 23))
+              d = ImageDraw.Draw(im)
+              d.rounded_rectangle((48,45,1232,675), radius=24, fill=(22,27,34), outline=(48,54,61), width=4)
+              for i,c in enumerate([(255,123,114),(210,153,34),(63,185,80)]):
+                  d.ellipse((80+i*34,75,98+i*34,93), fill=c)
+              d.line((80,120,1200,120), fill=(48,54,61), width=2)
+              return im, d
+
+          im,d = base()
+          d.text((85,170),'WHY OLD HARDWARE',font=bold,fill=(240,246,252))
+          d.text((85,258),'CAN WEIGH MORE',font=bold,fill=(240,246,252))
+          d.text((90,470),'PowerPC G4  2.5×',font=medium,fill=(63,185,80))
+          d.text((90,525),'Apple M1     1.2×',font=medium,fill=(88,166,255))
+          d.text((90,580),'Modern x86   0.8×',font=medium,fill=(210,153,34))
+          d.text((835,505),'VM? fingerprint it.',font=medium,fill=(255,123,114))
+          im.save(out/'thumbnail.png', optimize=True)
+
+          im,d = base()
+          d.text((85,170),'RUSTCHAIN',font=bold,fill=(240,246,252))
+          d.text((85,258),'CATCHES THE VM',font=bold,fill=(240,246,252))
+          items=[('CLOCK','PASS'),('CACHE','PASS'),('SIMD','PASS'),('THERMAL','PASS'),('JITTER','PASS'),('ANTI-EMU','FAIL')]
+          for i,(a,b) in enumerate(items):
+              x=90+(i%3)*360; y=395+(i//3)*95
+              d.text((x,y),a,font=small,fill=(139,148,158))
+              d.text((x+165,y),b,font=medium,fill=(63,185,80) if b=='PASS' else (255,123,114))
+          d.text((90,620),'Real Azure/GitHub Actions dry-run',font=regular,fill=(88,166,255))
+          im.save(out/'thumbnail-alt-1.png', optimize=True)
+
+          im,d = base()
+          d.text((85,170),'PROOF OF',font=bold,fill=(240,246,252))
+          d.text((85,258),'ANTIQUITY',font=bold,fill=(240,246,252))
+          d.text((90,455),'1 CPU = 1 VOTE',font=bold,fill=(88,166,255))
+          d.text((90,560),'hardware age becomes reward weight',font=medium,fill=(63,185,80))
+          d.text((90,625),'Proof of Antiquity · reproducible dry-run',font=regular,fill=(139,148,158))
+          im.save(out/'thumbnail-alt-2.png', optimize=True)
+
+          for p in [out/'thumbnail.png', out/'thumbnail-alt-1.png', out/'thumbnail-alt-2.png']:
+              with Image.open(p) as chk:
+                  assert chk.size == (1280,720), (p, chk.size)
+                  assert chk.format == 'PNG', (p, chk.format)
+                  print(p, chk.size, chk.format)
+          PY
+      - name: Commit generated thumbnails
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'markabramov1993'
+          git config user.email '31065012+markabramov1993@users.noreply.github.com'
+          git add earn/poa-video-kit/thumbnail.png earn/poa-video-kit/thumbnail-alt-1.png earn/poa-video-kit/thumbnail-alt-2.png
+          if git diff --cached --quiet; then
+            echo 'No thumbnail changes to commit.'
+            exit 0
+          fi
+          git commit -m 'assets: add Type B PoA video thumbnails'
+          git push
