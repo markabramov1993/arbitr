@@ -31,7 +31,7 @@ That is a much more interesting result than simply saying “VMs are banned”: 
 
 ## 1:40–2:20 — Why older machines get a multiplier
 
-RustChain's public README lists higher multipliers for several vintage architectures. A PowerPC G4 is shown at 2.5x, while modern x86_64 is the 1.0x baseline. The network's thesis is that keeping working older computers alive should be economically rewarded instead of treating them as obsolete by default.
+At the source revision rechecked for this package, RustChain's public README and whitepaper list a PowerPC G4 at **2.5x**, Apple Silicon M1 at **1.2x**, and modern x86_64 at **0.8x**. The network's thesis is that keeping working older computers alive should be economically rewarded instead of treating them as obsolete by default.
 
 The multiplier changes the reward weight; it does not magically make an old CPU faster. A G4 still cannot compete with a modern GPU for raw compute. RustChain is valuing verified scarcity and preservation, not throughput.
 
