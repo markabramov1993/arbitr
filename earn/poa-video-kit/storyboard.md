@@ -24,7 +24,7 @@ Use oscilloscope/timing-style visual language rather than fake semiconductor ima
 Show a real terminal capture from the GitHub Actions dry-run. Highlight five PASS lines and the final `Anti-Emulation Checks... FAIL`. Beside it show the runner fact: `Hypervisor vendor: Microsoft`.
 
 ## Shot 6 — 1:35–2:00
-Hardware timeline: modern x86 at 1.0x, Apple Silicon M1 at 1.2x, PowerPC G4 at 2.5x. Add text: `Reward weight ≠ compute speed`.
+Hardware timeline using the current README/whitepaper values at the pinned source revision: modern x86_64 at 0.8x, Apple Silicon M1 at 1.2x, PowerPC G4 at 2.5x. Add text: `Reward weight ≠ compute speed`.
 
 ## Shot 7 — 2:00–2:20
 Old laptop stays powered on while a recycling/e-waste pile fades into the background. Do not claim measured environmental savings unless a sourced number is shown.
