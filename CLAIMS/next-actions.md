@@ -1,12 +1,13 @@
-# Immediate bounty action queue — audited 2026-09-06
+# Immediate bounty action queue — audited 2026-09-10
 
-1. Watch for acceptance/payment on **#13949, #1575, #1579 and #100**; promote only an explicit acceptance to RECEIVABLE and only a real wallet/cash receipt to CONFIRMED.
-2. **#16497:** wait for the material Sep 6 review request on the two 13 RTC draft-acceptance tranches; answer maintainer questions immediately, but do not send duplicate follow-ups.
-3. **RTC wallet:** re-run the live balance/history probe after any acceptance/payout signal. Last verified state: 0.0 RTC, 0 transactions.
-4. **Mova #91:** monitor PR #257 and competing PR #343; current branch includes explicit `pay/create_order/dispatch/refund` topics.
-5. **Mermail/Superteam:** monitor official PR #174 / proposal #173 and preserve the already-submitted Superteam entry; no duplicate submission.
-6. **#16601 Type C:** keep only as historical/low-probability because the lane has an earlier accepted Type C; do not spend follow-up bandwidth here without maintainer request.
-7. Search new funded work only after duplicate checks in GitHub comments and SENT mail.
-8. ProofRoute native submission waits for authenticated browser access; any grant remains project-restricted.
+1. **Protect confirmed capital:** wallet `RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d` has **5.0 RTC CONFIRMED**, received from `founder_community` for BoTTube/RustChain #1102 (`health()` return-type mismatch), tx `b5034bc573d119c8b74c0b9773afa88c`. Keep it ring-fenced until a user-accessible RTC conversion path and full economics are verified.
+2. **#1102 second/final item:** mobile login API-key validation bug was submitted Sep 10 for 5 RTC. This fills the contributor cap of 2 items. Watch for Sophia/maintainer acceptance or payment; do not submit a third #1102 claim and do not follow up the same day.
+3. **Short RTC payout queue:** watch #13949 (2 RTC), #1575 (3–5 RTC canonical-rate ambiguity), #1579 (3 RTC), and #100 (2 RTC). All have already been submitted through valid routes. Promote only explicit acceptance to RECEIVABLE and only live wallet receipt to CONFIRMED.
+4. **#16497:** two Sep 4 long-form submissions remain under review; current ask is the two 13 RTC draft-acceptance tranches. Correction/reconciliation has already been sent. No duplicate follow-up unless maintainers ask.
+5. **#16601:** Type B Proof-of-Antiquity package (15 RTC) and Type D syndication add-on (+8 RTC, conditional on the backing article being accepted) were submitted by email Sep 4 and re-audited. Type C is occupied by an earlier accepted submission. Do not duplicate-email.
+6. **Mermail / Superteam:** platform confirmation `Submission Received!` arrived Sep 9. Preserve the existing entry and monitor PR #174 / issue #173; 500 USDC remains a judged prize pool, not receivable cash.
+7. **Mova #91 and Lilly batch:** archived unless maintainers explicitly revive/accept our work. Do not spend further execution time there.
+8. **New work:** latest blockchain bounty radar pass on Sep 10 found no eligible high-value public hit >=500 nominal. Search only funded/open/unoccupied work with a short acceptance path; skip #1102 because our cap is full.
+9. **Browser-native submissions:** Remote Desktop device is offline and Opera Connector is disconnected. Continue through Gmail/GitHub/CI paths that are available; do not fabricate browser completion.
 
-Never count closed Lilly fallback work, bounty face value, prize pools, simulated PnL or an unreceived token as seed capital.
+Never count prize pools, bounty face value, closed fallback work, simulated PnL, or an unreceived token as seed capital.
