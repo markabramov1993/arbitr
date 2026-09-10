@@ -6,6 +6,12 @@ https://github.com/markabramov1993/arbitr/blob/main/earn/rustchain-github-action
 ## Suggested canonical title
 RustChain Miner Dry-Run in GitHub Actions: What the Hardware Fingerprint Actually Detects
 
+## Author credit
+`markabramov1993` / Oleg Leads
+
+## Syndication permission
+The author grants Elyan Labs permission to syndicate/cross-post this article and the original cover asset on its official channels with permanent attribution to `markabramov1993`. The author retains authorship. This permission is limited to publication/syndication of this submitted bounty package and does not transfer ownership of unrelated repository content.
+
 ## Dev.to
 
 ```yaml
