@@ -8,6 +8,8 @@ This is a client contract bug: TypeScript consumers are told that pagination fie
 
 ## Current SDK contract
 
+Re-checked against upstream `Scottcjn/bottube` main commit `d3f2231a24e6c462e54e409e72b21beef9720cf8` on 2026-09-10.
+
 In `js-sdk/src/client.ts`, `getTrending()` returns:
 
 ```ts
@@ -34,42 +36,43 @@ export interface VideoListResponse {
 
 ## Production reproduction
 
-A read-only GitHub Actions probe requested:
-
-```text
-GET https://bottube.ai/api/trending?limit=3
-```
-
-Evidence run:
+Original read-only evidence run:
 
 https://github.com/markabramov1993/arbitr/actions/runs/34410032423
+
+A second independent read-only probe on 2026-09-10 re-confirmed the mismatch:
+
+https://github.com/markabramov1993/arbitr/actions/runs/34474241973
+
+The second probe requested:
+
+```text
+GET https://bottube.ai/api/trending?limit=2
+```
 
 Observed:
 
 ```text
-STATUS=200
-TOP_LEVEL_KEYS=["category", "videos"]
-HAS_TOTAL=False
-HAS_PAGE=False
-HAS_PER_PAGE=False
-HAS_HAS_MORE=False
-VIDEO_COUNT=20
+HTTP 200
+TOP_KEYS ['category', 'videos']
+category = null
+videos length = 20
 ```
 
-So the live response is not a `VideoListResponse`. All four pagination fields declared as required are absent.
+Therefore the live response again contains neither `total`, `page`, `per_page`, nor `has_more`, even though all four are required by the SDK's declared return type.
 
-The same probe also shows the endpoint returned 20 videos even though `limit=3` was requested. I am not treating that as a separate bounty finding here; it is supporting evidence that the live endpoint contract differs from the JS SDK contract.
+The endpoint also returned 20 videos despite `limit=2`. I am **not** claiming that behavior as a separate bounty item; it is only additional evidence that the live endpoint contract differs materially from the SDK contract.
 
 ## Impact
 
 A TypeScript caller can write code that type-checks but fails at runtime:
 
 ```ts
-const result = await client.getTrending({ limit: 3 });
+const result = await client.getTrending({ limit: 2 });
 console.log(result.total.toFixed(0)); // TypeScript accepts this; production `total` is undefined.
 ```
 
-Likewise, pagination logic based on `page`, `per_page`, or `has_more` is falsely presented as safe by the official SDK type.
+Pagination logic based on `page`, `per_page`, or `has_more` is likewise falsely presented as safe by the official SDK type.
 
 ## Expected
 
@@ -84,11 +87,12 @@ The server and SDK should have one explicit contract, with a regression test usi
 
 Before filing, I searched the BoTTube issue and PR history and the RustChain bounty claim history for `VideoListResponse`, `getTrending`, `total`, `page`, `per_page`, and `has_more` response-shape mismatches. I found no prior report for this contract bug.
 
-I did find PR #2218, which documents a different known problem: an ignored Python SDK `timeframe` argument. I deliberately did **not** claim that issue because it is already known. This report is specifically about the JavaScript SDK's declared response shape versus the live JSON shape.
+I also re-ran open/closed issue searches on 2026-09-10 for `getTrending()` and `/api/trending` pagination-contract terms and found no prior matching report. A different existing issue/PR concerns Python SDK `timeframe` behavior; this report does not claim that known problem.
 
 ## Environment / evidence
 
-- Live endpoint checked: 2026-09-09 UTC
+- Upstream main re-checked: 2026-09-10, commit `d3f2231a24e6c462e54e409e72b21beef9720cf8`
+- Live endpoint re-checked: 2026-09-10 UTC
 - Probe environment: GitHub-hosted Ubuntu 24.04 runner
 - Request type: unauthenticated GET only
 - No state changes, writes, accounts, payments, or private data used
