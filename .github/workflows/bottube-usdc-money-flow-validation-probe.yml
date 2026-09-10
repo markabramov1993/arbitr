@@ -1,0 +1,135 @@
+name: BoTTube USDC Money Flow Validation Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bottube-usdc-money-flow-validation-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout current BoTTube main
+        run: |
+          git clone --depth 1 https://github.com/Scottcjn/bottube.git bottube
+          cd bottube
+          git rev-parse HEAD | tee ../bottube-upstream-sha.txt
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install minimal dependencies
+        run: python -m pip install Flask requests
+
+      - name: Reproduce locally with temporary SQLite only
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH="$PWD/bottube" python - <<'PY' | tee usdc-money-flow-validation.txt
+          import os
+          import sqlite3
+          import tempfile
+          from flask import Flask
+
+          fd, db_path = tempfile.mkstemp(suffix='.db')
+          os.close(fd)
+          os.environ['BOTTUBE_DB_PATH'] = db_path
+
+          try:
+              with sqlite3.connect(db_path) as db:
+                  db.execute('''CREATE TABLE agents (
+                      id INTEGER PRIMARY KEY,
+                      agent_name TEXT UNIQUE NOT NULL,
+                      display_name TEXT,
+                      api_key TEXT UNIQUE NOT NULL,
+                      eth_address TEXT
+                  )''')
+                  db.execute(
+                      'INSERT INTO agents(id, agent_name, display_name, api_key, eth_address) VALUES(1,?,?,?,?)',
+                      ('alice', 'Alice', 'alice-key', '0x' + 'a'*40),
+                  )
+                  db.commit()
+
+              from usdc_blueprint import usdc_bp, init_usdc_tables
+              with sqlite3.connect(db_path) as db:
+                  init_usdc_tables(db)
+                  db.execute(
+                      '''INSERT INTO usdc_balances
+                         (agent_name,balance_usdc,total_deposited,total_spent,total_earned,updated_at)
+                         VALUES ('alice',10.0,10.0,0.0,0.0,0.0)'''
+                  )
+                  db.commit()
+
+              app = Flask(__name__)
+              app.config['TESTING'] = True
+              app.register_blueprint(usdc_bp)
+              client = app.test_client()
+              headers = {'X-API-Key': 'alice-key'}
+
+              # 1) payout accepts a correctly-sized but non-hex Base address and
+              # immediately debits the user's internal USDC balance.
+              invalid = '0x' + ('Z' * 40)
+              r = client.post('/api/usdc/payout', headers=headers, json={
+                  'amount_usdc': 1.0,
+                  'to_address': invalid,
+              })
+              print('PAYOUT_NONHEX_STATUS=', r.status_code)
+              print('PAYOUT_NONHEX_JSON=', r.get_json())
+              with sqlite3.connect(db_path) as db:
+                  bal = db.execute("SELECT balance_usdc FROM usdc_balances WHERE agent_name='alice'").fetchone()[0]
+                  payout = db.execute("SELECT amount_usdc,to_address,status FROM usdc_payouts ORDER BY id DESC LIMIT 1").fetchone()
+              print('PAYOUT_BALANCE_AFTER=', bal)
+              print('PAYOUT_ROW=', payout)
+              assert r.status_code == 200
+              assert bal == 9.0
+              assert payout == (1.0, invalid, 'pending')
+              print('PAYOUT_NONHEX_BUG_REPRODUCED=true')
+
+              # 2) direct to_agent tips do not resolve/validate a real agent.
+              ghost = 'definitely-no-such-agent-7f2d9e'
+              r2 = client.post('/api/usdc/tip', headers=headers, json={
+                  'amount_usdc': 1.0,
+                  'to_agent': ghost,
+              })
+              print('GHOST_TIP_STATUS=', r2.status_code)
+              print('GHOST_TIP_JSON=', r2.get_json())
+              with sqlite3.connect(db_path) as db:
+                  ghost_agent = db.execute("SELECT 1 FROM agents WHERE agent_name=?", (ghost,)).fetchone()
+                  ghost_bal = db.execute("SELECT balance_usdc,total_earned FROM usdc_balances WHERE agent_name=?", (ghost,)).fetchone()
+                  alice_bal = db.execute("SELECT balance_usdc FROM usdc_balances WHERE agent_name='alice'").fetchone()[0]
+                  tip = db.execute("SELECT from_agent,to_agent,amount_usdc,creator_share FROM usdc_tips ORDER BY id DESC LIMIT 1").fetchone()
+              print('GHOST_AGENT_EXISTS=', ghost_agent is not None)
+              print('GHOST_BALANCE_ROW=', ghost_bal)
+              print('SENDER_BALANCE_AFTER_GHOST_TIP=', alice_bal)
+              print('TIP_ROW=', tip)
+              assert r2.status_code == 200
+              assert ghost_agent is None
+              assert ghost_bal == (0.85, 0.85)
+              assert alice_bal == 8.0
+              assert tip[1] == ghost
+              print('GHOST_TIP_BUG_REPRODUCED=true')
+          finally:
+              try:
+                  os.unlink(db_path)
+              except FileNotFoundError:
+                  pass
+          PY
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bottube-usdc-money-flow-validation
+          path: |
+            bottube-upstream-sha.txt
+            usdc-money-flow-validation.txt
+          retention-days: 30
