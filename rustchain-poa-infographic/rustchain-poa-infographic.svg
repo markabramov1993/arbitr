@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1600" viewBox="0 0 1200 1600" role="img" aria-labelledby="title desc">
+  <title id="title">RustChain Proof of Antiquity explainer</title>
+  <desc id="desc">Infographic explaining one CPU one vote, six hardware fingerprint checks, antiquity weighted rewards, VM resistance, and how to start with pip install clawrtc.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0b1020"/><stop offset="1" stop-color="#17223a"/></linearGradient>
+    <style>
+      .h1{font:700 54px system-ui,sans-serif;fill:#fff}.h2{font:700 31px system-ui,sans-serif;fill:#fff}.body{font:500 24px system-ui,sans-serif;fill:#dce7ff}.small{font:500 20px system-ui,sans-serif;fill:#c5d2ea}.num{font:800 28px system-ui,sans-serif;fill:#0b1020}.mono{font:600 25px ui-monospace,monospace;fill:#d7ffe8}.card{fill:#111b30;stroke:#304a72;stroke-width:2}.accent{fill:#67e8a5}.accent2{fill:#72a7ff}.muted{fill:#90a4c8}
+    </style>
+  </defs>
+  <rect width="1200" height="1600" fill="url(#bg)"/>
+  <text x="70" y="95" class="h1">Proof of Antiquity</text>
+  <text x="70" y="142" class="body">How RustChain tries to give real physical hardware a fair vote</text>
+
+  <rect x="70" y="190" width="1060" height="170" rx="26" class="card"/>
+  <circle cx="150" cy="275" r="45" class="accent"/><text x="137" y="286" class="num">1</text>
+  <text x="220" y="258" class="h2">1 CPU = 1 vote</text>
+  <text x="220" y="305" class="body">Baseline participation is tied to a distinct physical CPU.</text>
+  <text x="220" y="340" class="small">Hardware antiquity can change reward weight.</text>
+
+  <text x="70" y="430" class="h2">Six core fingerprint checks</text>
+  <text x="70" y="470" class="small">Multiple independent signals make VM / emulator spoofing harder.</text>
+
+  <g transform="translate(70 510)">
+    <rect width="510" height="130" rx="22" class="card"/><circle cx="55" cy="65" r="30" class="accent2"/><text x="46" y="74" class="num">1</text><text x="105" y="55" class="body">Clock drift</text><text x="105" y="91" class="small">oscillator variance</text>
+  </g>
+  <g transform="translate(620 510)">
+    <rect width="510" height="130" rx="22" class="card"/><circle cx="55" cy="65" r="30" class="accent2"/><text x="46" y="74" class="num">2</text><text x="105" y="55" class="body">Cache timing</text><text x="105" y="91" class="small">latency characteristics</text>
+  </g>
+  <g transform="translate(70 665)">
+    <rect width="510" height="130" rx="22" class="card"/><circle cx="55" cy="65" r="30" class="accent2"/><text x="46" y="74" class="num">3</text><text x="105" y="55" class="body">SIMD identity</text><text x="105" y="91" class="small">instruction features + timing</text>
+  </g>
+  <g transform="translate(620 665)">
+    <rect width="510" height="130" rx="22" class="card"/><circle cx="55" cy="65" r="30" class="accent2"/><text x="46" y="74" class="num">4</text><text x="105" y="55" class="body">Thermal entropy</text><text x="105" y="91" class="small">response under load</text>
+  </g>
+  <g transform="translate(70 820)">
+    <rect width="510" height="130" rx="22" class="card"/><circle cx="55" cy="65" r="30" class="accent2"/><text x="46" y="74" class="num">5</text><text x="105" y="55" class="body">Instruction jitter</text><text x="105" y="91" class="small">path variability</text>
+  </g>
+  <g transform="translate(620 820)">
+    <rect width="510" height="130" rx="22" class="card"/><circle cx="55" cy="65" r="30" class="accent2"/><text x="46" y="74" class="num">6</text><text x="105" y="55" class="body">Anti-emulation</text><text x="105" y="91" class="small">hypervisor / emulator clues</text>
+  </g>
+
+  <rect x="70" y="1000" width="1060" height="220" rx="26" class="card"/>
+  <text x="105" y="1058" class="h2">Why combine the checks?</text>
+  <text x="105" y="1104" class="body">A single signal can be spoofed. Several agreeing signals are harder</text>
+  <text x="105" y="1140" class="body">to fake consistently. VMs and emulators can be rejected or</text>
+  <text x="105" y="1176" class="body">discounted when measured behavior does not look physical.</text>
+
+  <rect x="70" y="1260" width="1060" height="155" rx="26" class="card"/>
+  <text x="105" y="1318" class="h2">Then antiquity affects reward weight</text>
+  <text x="105" y="1362" class="body">Older / rarer hardware can receive an antiquity multiplier.</text>
+
+  <rect x="70" y="1450" width="1060" height="95" rx="22" fill="#0c2a20" stroke="#3ca878" stroke-width="2"/>
+  <text x="105" y="1492" class="small">Start here</text>
+  <text x="255" y="1508" class="mono">pip install clawrtc</text>
+  <text x="70" y="1580" class="small">Sources: Scottcjn/Rustchain → docs/PROTOCOL.md · docs/whitepaper/hardware-fingerprinting.md</text>
+</svg>
