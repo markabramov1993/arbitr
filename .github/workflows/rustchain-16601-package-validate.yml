@@ -1,0 +1,89 @@
+name: Validate RustChain #16601 Packages
+
+on:
+  push:
+    paths:
+      - 'earn/poa-video-kit/**'
+      - 'earn/syndication/**'
+      - '.github/workflows/rustchain-16601-package-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install image validator
+        run: python -m pip install --disable-pip-version-check pillow
+      - name: Validate Type B and Type D package contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          import re
+          import xml.etree.ElementTree as ET
+
+          root = Path('.')
+          b = root / 'earn/poa-video-kit'
+          d = root / 'earn/syndication'
+
+          required_b = [
+              'README.md','script.md','storyboard.md','assembly.md','metadata.md','SOURCES.md',
+              'thumbnail.png','thumbnail-alt-1.png','thumbnail-alt-2.png'
+          ]
+          required_d = ['README.md','frontmatter.md','cover.svg']
+
+          missing = [str(b/x) for x in required_b if not (b/x).is_file()]
+          missing += [str(d/x) for x in required_d if not (d/x).is_file()]
+          assert not missing, f'missing required files: {missing}'
+
+          for name in ['thumbnail.png','thumbnail-alt-1.png','thumbnail-alt-2.png']:
+              p = b / name
+              with Image.open(p) as im:
+                  assert im.format == 'PNG', f'{name}: expected PNG, got {im.format}'
+                  assert im.size == (1280,720), f'{name}: expected 1280x720, got {im.size}'
+                  print(f'OK {name}: {im.format} {im.size[0]}x{im.size[1]}')
+
+          svg_root = ET.parse(d/'cover.svg').getroot()
+          assert svg_root.attrib.get('width') == '1000', svg_root.attrib
+          assert svg_root.attrib.get('height') == '420', svg_root.attrib
+          print('OK cover.svg: 1000x420')
+
+          script = (b/'script.md').read_text(encoding='utf-8')
+          storyboard = (b/'storyboard.md').read_text(encoding='utf-8')
+          sources = (b/'SOURCES.md').read_text(encoding='utf-8')
+          readme_b = (b/'README.md').read_text(encoding='utf-8')
+          fm = (d/'frontmatter.md').read_text(encoding='utf-8')
+          readme_d = (d/'README.md').read_text(encoding='utf-8')
+
+          # Current authoritative values used in the final review pass.
+          for needle in ['PowerPC G4', '2.5x', 'Apple Silicon M1', '1.2x', 'modern x86_64', '0.8x']:
+              assert needle.lower() in (script + '\n' + storyboard + '\n' + sources).lower(), f'missing current claim: {needle}'
+          assert 'modern x86_64 at **0.8x**' in script, 'script is not pinned to current modern-x86 value'
+
+          # Must be traceable to the pinned upstream revision and the real reproduction run.
+          assert 'e805b5ff18f515a7f315807b75b39ed1c5eca972' in sources
+          assert '33838143501' in sources
+
+          # Type D requires platform-ready frontmatter and explicit syndication rights/credit.
+          for needle in ['## Dev.to', '## Hashnode', 'canonical_url:', 'cover_image:', '## Author credit', '## Syndication permission']:
+              assert needle in fm, f'frontmatter missing {needle}'
+          assert 'permanent attribution' in fm.lower()
+          assert 'markabramov1993' in fm
+          assert 'markabramov1993' in readme_d
+
+          # Quick hygiene checks across the submitted package text.
+          combined = '\n'.join((b/x).read_text(encoding='utf-8') for x in ['README.md','script.md','storyboard.md','assembly.md','metadata.md','SOURCES.md'])
+          combined += '\n' + fm + '\n' + readme_d
+          assert not re.search(r'\bTODO\b|\bTBD\b', combined, re.I), 'package contains TODO/TBD'
+          assert 'RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d' in readme_b
+          assert 'RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d' in readme_d
+
+          print('PASS: #16601 Type B and Type D package validation')
+          PY
