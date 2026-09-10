@@ -9,7 +9,7 @@ on:
 permissions:
   contents: read
 
-# Live balance probe refreshed 2026-09-09 after #1102 24h hold.
+# Live balance probe refreshed 2026-09-10 after #1102 acceptance hold elapsed.
 jobs:
   check:
     runs-on: ubuntu-latest
