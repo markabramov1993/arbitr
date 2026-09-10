@@ -1,0 +1,39 @@
+name: RustChain 398 Step2 Mock Signature Guard
+
+on:
+  push:
+    paths:
+      - '.github/workflows/rustchain-398-step2-mocksig.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Clone current RustChain
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/Scottcjn/Rustchain.git
+          cd Rustchain
+          echo "RUSTCHAIN_HEAD=$(git rev-parse HEAD)"
+
+      - name: Verify production flags are fail-closed
+        working-directory: Rustchain
+        run: |
+          set -euo pipefail
+          grep -n 'TESTNET_ALLOW_INLINE_PUBKEY = False' node/ed25519_config.py
+          grep -n 'TESTNET_ALLOW_MOCK_SIG = False' node/ed25519_config.py
+          grep -n 'enforce_mock_signature_runtime_guard' node/wsgi.py
+
+      - name: Run focused regression tests
+        working-directory: Rustchain
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+        run: |
+          set -euo pipefail
+          python -m pip install -q uv
+          uv run --no-project --with pytest --with flask python -m pytest node/tests/test_mock_signature_guard.py -q
