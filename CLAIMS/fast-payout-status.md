@@ -28,6 +28,7 @@
 - **Mermail / Superteam — 500 USDC prize pool:** Superteam sent `Submission Received!` on Sep 9. Existing submission and PR #174 remain the only entry; no duplicate submission. Prize pool is PIPELINE, not receivable.
 
 ## Archived / skipped
+- **aquarium-of-gullibles / bounty-plaza#1336+#1334 ($1,250+$850 nominal):** verified honeypot on 2026-09-11 (impossible O(N) isomorphism claim, missing source paths, digitaltoolsshed claim gate). Rejected by radar filters; not receivable. Evidence: `earn/aquarium-gullibles-radar-rejection.md`.
 - **Mova #91:** archived after upstream resolution elsewhere; no acceptance/payment for our PR.
 - **Lilly former $635 nominal batch:** archived; issues closed elsewhere with no acceptance evidence.
 - #1102 further findings may still be technically valid but cannot be claimed under our already-full cap.
