@@ -6,7 +6,7 @@
 4. **#16497:** pursue the two **13 RTC draft-acceptance** tranches for the Sep 4 articles. Correction/reconciliation is already on record.
 5. **#16601:** Type B Proof-of-Antiquity package (15 RTC) and Type D syndication add-on (+8 RTC conditional on accepted backing article) are already submitted. Type C is occupied; no duplicate Type C work.
 6. **Mermail / Superteam:** maintain the submitted 500 USDC judged entry and upstream PR #174. Platform receipt arrived Sep 9, but prize pool remains PIPELINE.
-7. **New work:** prefer paid, open, unoccupied tasks with explicit acceptance/payment mechanics. Latest Sep 10 blockchain radar found no eligible >=500 public hit, so do not chase noisy high-value mirrors.
+7. **New work:** prefer paid, open, unoccupied tasks with explicit acceptance/payment mechanics. Sep 11 radar mirrors for aquarium-of-gullibles ($1,250 / $850) are verified honeypots — reject, do not chase. See `earn/aquarium-gullibles-radar-rejection.md`.
 8. **Archive:** Mova #91 and the former Lilly $635 batch unless explicit maintainer acceptance/revival arrives.
 
 Avoid artificial activity, capital-risking tests, region-ineligible work, duplicate claims, and any live FLASH transaction before asset usability and current-state execution economics are independently verified.

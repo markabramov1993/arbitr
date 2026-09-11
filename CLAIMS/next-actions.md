@@ -7,7 +7,7 @@
 5. **#16601:** Type B Proof-of-Antiquity package (15 RTC) and Type D syndication add-on (+8 RTC, conditional on the backing article being accepted) were submitted by email Sep 4 and re-audited. Type C is occupied by an earlier accepted submission. Do not duplicate-email.
 6. **Mermail / Superteam:** platform confirmation `Submission Received!` arrived Sep 9. Preserve the existing entry and monitor PR #174 / issue #173; 500 USDC remains a judged prize pool, not receivable cash.
 7. **Mova #91 and Lilly batch:** archived unless maintainers explicitly revive/accept our work. Do not spend further execution time there.
-8. **New work:** latest blockchain bounty radar pass on Sep 10 found no eligible high-value public hit >=500 nominal. Search only funded/open/unoccupied work with a short acceptance path; skip #1102 because our cap is full.
+8. **New work:** Sep 11 radar hits (bounty-plaza#1336 / #1334 → aquarium-of-gullibles) are honeypots; radar now rejects them. Search only funded/open/unoccupied work with a short acceptance path; skip #1102 because our cap is full.
 9. **Browser-native submissions:** Remote Desktop device is offline and Opera Connector is disconnected. Continue through Gmail/GitHub/CI paths that are available; do not fabricate browser completion.
 
 Never count prize pools, bounty face value, closed fallback work, simulated PnL, or an unreceived token as seed capital.
