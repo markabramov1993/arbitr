@@ -1,67 +1,88 @@
 # PROFIT ENGINE — Capital Ledger
 
-Updated: **2026-09-10 live audit**
+Updated: **2026-09-12 live audit**
 
-This ledger separates money actually received from receivables, open bounty pipeline and simulated trading PnL.
+This ledger separates money actually received from receivables, pending settlement, open bounty pipeline and simulated trading PnL.
 
 ## 1. Confirmed capital
 
 | Bucket | Confirmed amount | Evidence |
 |---|---:|---|
 | Cash / stablecoin bounty payouts | **$0** | No fiat/stablecoin payout received yet |
-| RTC | **5.0 RTC** | Live RustChain probe on 2026-09-10 12:14 UTC returned `amount_rtc: 5.0`; wallet history contains one `transfer_in` from `founder_community`, tx `b5034bc573d119c8b74c0b9773afa88c` |
+| RTC spendable/settled | **5.0 RTC** | Live RustChain probe on 2026-09-12 13:19 UTC returned `amount_rtc: 5.0`; confirmed transfer `b5034bc573d119c8b74c0b9773afa88c` |
 | DeFi execution profit | **$0** | No settled live FLASH execution |
 
-**CONFIRMED seed capital = 5.0 RTC + $0 fiat/stablecoin.**
+**CONFIRMED seed capital right now = 5.0 RTC + $0 fiat/stablecoin.**
 
-The 5 RTC is the first independently verified external reward received by this project. It came from BoTTube/RustChain bounty #1102 for the JS SDK `health()` return-type mismatch. Sophia accepted it as a functional bug for 5 RTC with idempotency key `markabramov1993-1102-sdk-health-type`; public receipt exists on #1102 and the live wallet check proves settlement.
+## 2. Paid but still in RustChain 24-hour hold
 
-## 2. Active submitted payout requests
+Sophia Elya adjudicated the Sep 9–11 batch and explicitly reported **121 RTC paid** to `RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d`, subject to the network's 24-hour hold.
+
+The 2026-09-12 13:19 UTC live probe independently shows **nine pending inbound transfers totaling 121 RTC** from `founder_community`; current spendable balance is still 5 RTC.
+
+| Source | RTC | Current state |
+|---|---:|---|
+| #315 Stage 1 asset pack | 30 | PAID / pending hold |
+| #398 Step 2 Mock Signature Mode reproduction | 15 | PAID / pending hold |
+| #16601 Type C Shorts kit | 15 | PAID / pending hold |
+| #16497 tutorial 1 draft tranche | 13 | PAID / pending hold |
+| #16497 tutorial 2 draft tranche | 13 | PAID / pending hold |
+| #398 Step 1 security assessment | 10 | PAID / pending hold |
+| #13954 Proof-of-Antiquity infographic | 10 | PAID / pending hold |
+| #13224 identity-churn critique | 10 | PAID / pending hold |
+| #1102 mobile login false-success | 5 | PAID / pending hold |
+
+**Pending settlement total = 121 RTC.** If all nine holds clear normally, spendable RTC should become **126 RTC**. Do not count the 121 as confirmed spendable capital until the wallet balance/history changes from `pending`.
+
+The pending transfers were created around 2026-09-11 16:18–16:20 CEST, so the 24-hour hold should expire around 2026-09-12 16:18–16:20 CEST. Re-query after that window.
+
+## 3. Remaining active payout paths
 
 | Opportunity | Face value | State |
 |---|---:|---|
-| BoTTube/RustChain #1102 — JS SDK `health()` type mismatch | 5 RTC | **CONFIRMED / PAID** — tx `b5034bc573d119c8b74c0b9773afa88c` |
-| BoTTube/RustChain #1102 — mobile login does not validate API key | 5 RTC requested | **PIPELINE** — second/final item under cap 2; source-verified and submitted Sep 10 |
-| RustChain #13949 — README badge | 2 RTC | PIPELINE — canonical fallback claim sent; no duplicate |
-| RustChain #1575 — Contributor Registry | 3–5 RTC canonical-rate ambiguity | PIPELINE — registration sent through documented 403 fallback; no more follow-ups until response |
-| RustChain #1579 — contextual Elyan Labs README mention | 3 RTC | PIPELINE — real pre-existing `arbitr` repo updated; claim sent |
-| RustChain #100 — first Discovery Mode claim | 2 RTC | PIPELINE — already sent |
-| RustChain #16497 — two article draft-acceptance tranches | 13 + 13 RTC | PIPELINE — Sep 4 submissions; corrected tutorial; reconciliation already sent |
-| Mermail / Superteam | 500 USDC total prize pool | PIPELINE — platform confirms submission received; PR #174 open/mergeable |
+| #16497 tutorial 1 live-publication tranche | 20 RTC | AVAILABLE after allowlisted off-platform article stays live 7 days |
+| #16497 tutorial 2 live-publication tranche | 20 RTC | AVAILABLE after allowlisted off-platform article stays live 7 days |
+| #1575 Contributor Registry | 3–5 RTC rate ambiguity | PIPELINE — email fallback already sent; do not duplicate |
+| #1579 contextual Elyan Labs README mention | 3 RTC | PIPELINE — email fallback already sent |
+| #13949 README badge | 2 RTC | PIPELINE — prior claim already sent |
+| #100 Discovery Mode | 2 RTC | PIPELINE — prior claim already sent |
+| Mermail / Superteam | 500 USDC prize pool | PIPELINE — submitted; PR #174 open/mergeable |
 
-## 3. Downgraded / archived
+The #1102 contributor cap is exhausted: the first 5 RTC item is confirmed and the second 5 RTC item is in the 121 RTC paid batch. Do not submit additional #1102 claims unless maintainers explicitly reopen capacity.
 
-- **Mova Store #91 / $90:** issue completed via other upstream work; our PR #257 has no acceptance/payment and is currently non-mergeable. **ARCHIVED / CLOSED ELSEWHERE** unless maintainer explicitly revives it.
-- **RustChain #16601 Type C:** earlier Type C accepted in thread; our historical packages are low probability. **OCCUPIED.**
-- **Lilly batch formerly $635 nominal:** all nine relevant issues closed elsewhere with no acceptance evidence for our work. **ARCHIVED.**
-- **RustChain #16471 audit:** still open but heavily occupied with many already-reported silent-success findings and an active claimed state; do not duplicate work.
+## 4. Downgraded / archived
 
-## 4. Capital usability / conversion gate
+- **Mova Store #91 / $90:** issue completed via other upstream work; our PR #257 has no acceptance/payment. ARCHIVED unless maintainer explicitly revives it.
+- **Lilly batch formerly $635 nominal:** closed elsewhere with no acceptance evidence. ARCHIVED.
+- Stale mirrored bounty values and occupied/assigned tasks are not pipeline.
 
-RustChain source advertises Base wRTC/USDC swap information, but native RTC is not automatically the same asset as wRTC. Current bridge documentation explicitly says RustChain-origin RTC deposits are **operator-assisted/admin-authenticated**, not public self-service bridge calls. Therefore the 5 RTC balance remains ring-fenced; do not attempt a blind bridge/swap.
+## 5. Capital usability / conversion gate
 
-Before converting or using RTC as FLASH execution capital, verify a real user-accessible bridge path, current wRTC pool liquidity/quote, Base gas requirement, slippage and total conversion economics.
+Native RTC is not automatically liquid EVM capital. RustChain documentation has bridge/swap surfaces, but a verified user-controlled conversion path, liquidity quote, gas requirement and slippage economics are still required before treating RTC as usable FLASH trading capital.
 
-## 5. Capital ladder
+The 5 spendable RTC remains ring-fenced. The 121 pending RTC remains non-spendable until the hold clears.
+
+## 6. Capital ladder
 
 1. **BOOTSTRAP — ACHIEVED:** first external reward settled: 5 RTC.
-2. **ACCUMULATE — ACTIVE:** prioritize repeatably paying zero-capital bounties; second #1102 item submitted.
-3. **RING-FENCE:** keep confirmed RTC separate from nominal bounty values.
-4. **CONVERSION CHECK:** only bridge/swap through a verified user-accessible route.
+2. **PAYOUT ACCUMULATION — ACTIVE:** 121 RTC paid and in network hold.
+3. **CONFIRM RELEASE:** verify wallet reaches 126 RTC and pending records settle.
+4. **CONVERSION CHECK:** verify an actual user-accessible bridge/swap route and total economics.
 5. **LIVE MICRO-EXECUTION:** only after deterministic current-state simulation with fees, gas and slippage.
 6. **FLASH-LIQUIDITY EXECUTION:** only when exact execution remains net-positive under conservative assumptions.
 7. **SCALE FROM REALIZED PROFIT:** never from bounty face value or paper PnL.
 
-## 6. Accounting states
+## 7. Accounting states
 
-- **CONFIRMED** — money/token actually received or settled on-chain.
-- **RECEIVABLE** — explicitly accepted/merged and payment is due, but not received.
+- **CONFIRMED** — money/token actually spendable/received or settled on-chain.
+- **PAID / HOLD** — maintainer sent it and wallet history shows a pending transfer, but it is not spendable yet.
+- **RECEIVABLE** — explicitly accepted and payment is due, but no transfer is visible yet.
 - **PIPELINE** — submitted/open, not accepted.
-- **PREPARED** — deliverable/application ready but not yet natively submitted.
+- **PREPARED** — deliverable ready but not submitted.
 - **FORK** — transaction succeeded only in simulation/fork.
 - **PAPER** — calculated opportunity, not executed.
 - **ARCHIVED / REJECTED / OCCUPIED** — no longer a current expected payout path.
 
-## 7. Execution safety gate
+## 8. Execution safety gate
 
-Confirmed capital exists, but **5 native RTC alone does not authorize a live FLASH trade**. No private key/seed phrase in repo/CI; no fabricated users, wash volume, duplicate identities or prohibited activity. Every live transaction requires independently verified asset usability, current-state economics and bounded failure loss.
+Confirmed capital exists, but native RTC requires a verified conversion/use path before it can fund FLASH execution. No private key/seed phrase in repo/CI; no fabricated users, wash volume, duplicate identities or prohibited activity. Every live transaction requires independently verified asset usability, current-state economics and bounded failure loss.
