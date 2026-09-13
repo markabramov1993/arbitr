@@ -1,0 +1,54 @@
+name: RustChain bounty 2784 dry-run
+
+on:
+  push:
+    paths:
+      - '.github/workflows/rustchain-bounty-2784.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout RustChain
+        uses: actions/checkout@v4
+        with:
+          repository: Scottcjn/Rustchain
+          path: Rustchain
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install miner dependencies
+        run: python -m pip install --disable-pip-version-check requests PyNaCl
+
+      - name: Capture runner environment
+        run: |
+          echo '=== RUNNER ENVIRONMENT ==='
+          uname -a
+          echo '--- CPU ---'
+          lscpu
+          echo '--- MEMORY ---'
+          free -h
+
+      - name: Run RustChain miner dry-run only
+        working-directory: Rustchain
+        run: |
+          set -o pipefail
+          python3 miners/linux/rustchain_linux_miner.py \
+            --dry-run \
+            --wallet RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d \
+            --show-payload 2>&1 | tee /tmp/rustchain-2784-output.txt
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustchain-bounty-2784-evidence
+          path: /tmp/rustchain-2784-output.txt
+          if-no-files-found: warn
