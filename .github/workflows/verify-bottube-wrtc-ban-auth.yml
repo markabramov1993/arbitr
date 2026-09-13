@@ -1,0 +1,76 @@
+name: Verify BoTTube wRTC banned-key auth
+
+on:
+  push:
+    paths:
+      - '.github/workflows/verify-bottube-wrtc-ban-auth.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Clone current BoTTube main
+        run: git clone --depth 1 https://github.com/Scottcjn/bottube.git /tmp/bottube
+
+      - name: Install minimal test dependencies
+        run: python -m pip install --disable-pip-version-check flask requests
+
+      - name: Reproduce banned API-key authentication locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/bottube
+          python - <<'PY'
+          import sqlite3
+          import sys
+          from flask import Flask
+
+          sys.path.insert(0, '/tmp/bottube')
+          import wrtc_bridge_blueprint as sol
+          import base_wrtc_bridge_blueprint as base
+
+          db = sqlite3.connect(':memory:')
+          db.row_factory = sqlite3.Row
+          db.execute('''
+              CREATE TABLE agents (
+                  id INTEGER PRIMARY KEY,
+                  agent_name TEXT,
+                  sol_address TEXT,
+                  eth_address TEXT,
+                  rtc_balance REAL,
+                  api_key TEXT,
+                  is_banned INTEGER DEFAULT 0
+              )
+          ''')
+          db.execute(
+              'INSERT INTO agents (id, agent_name, sol_address, eth_address, rtc_balance, api_key, is_banned) VALUES (1, ?, ?, ?, ?, ?, 1)',
+              ('banned-local-test', '11111111111111111111111111111111', '0x' + '11'*20, 10.0, 'bottube_sk_banned_local')
+          )
+          db.commit()
+
+          # Keep reproduction entirely local: only exercise the authentication
+          # helpers inside Flask request contexts. No bridge route, RPC, balance
+          # mutation, or production request is used.
+          sol.get_db = lambda: db
+          base.get_db = lambda: db
+          app = Flask(__name__)
+
+          with app.test_request_context(headers={'X-API-Key': 'bottube_sk_banned_local'}):
+              sol_row = sol._get_authenticated_agent()
+          with app.test_request_context(headers={'X-API-Key': 'bottube_sk_banned_local'}):
+              base_row = base._get_authenticated_agent()
+
+          print('SOLANA_WRTC_BANNED_KEY_AUTHENTICATED=' + str(sol_row is not None))
+          print('BASE_WRTC_BANNED_KEY_AUTHENTICATED=' + str(base_row is not None))
+
+          if sol_row is None or base_row is None:
+              raise SystemExit('Current source no longer reproduces the reported authorization inconsistency')
+
+          print('REPRODUCTION_CONFIRMED=1')
+          print('NOTE=Bridge global-disable guards were not bypassed or tested; this proves only the latent banned-key auth helper behavior.')
+          PY
