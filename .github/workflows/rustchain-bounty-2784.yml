@@ -35,6 +35,7 @@ jobs:
           lscpu
           echo '--- MEMORY ---'
           free -h
+          echo 'Evidence source: GitHub-hosted Ubuntu runner; no mining or attestation submission is performed.'
 
       - name: Run RustChain miner dry-run only
         working-directory: Rustchain
