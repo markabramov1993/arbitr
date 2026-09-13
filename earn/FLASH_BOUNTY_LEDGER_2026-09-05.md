@@ -1,95 +1,123 @@
-# FLASH bounty / seed-capital ledger — audited 2026-09-10
+# FLASH bounty / seed-capital ledger — audited 2026-09-13
 
-Purpose: obtain **real external rewards first**. Only money/tokens actually received become FLASH seed capital. Face value, prize pools, sent emails, open PRs, bids and simulated PnL are never counted as cash.
+Purpose: obtain **real external rewards first**. Only money/tokens actually received become FLASH seed capital. Face value, prize pools, sent emails, open PRs and simulated PnL are never counted as cash.
 
 ## Headline
+
 - **Confirmed USD/stablecoin bounty cash: $0**
-- **Confirmed RTC: 5.0 RTC**
+- **Confirmed RTC: 126.0 RTC**
 - **Confirmed DeFi profit: $0**
 - RTC wallet: `RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d`
-- **Live RustChain probe 2026-09-10 12:14 UTC:** HTTP 200 balance = `5.0 RTC`; history count = `1`.
-- Confirmed tx: `b5034bc573d119c8b74c0b9773afa88c`, inbound 5 RTC from `founder_community`.
-- This is the **first real external reward received** by FLASH bounty operations.
+- Fresh live probe: GitHub Actions run `34759583859`, job `103729901214`, commit `acc86954404409f777d5111406f9edc7059a0551`, completed successfully on 2026-09-13.
+- Live RustChain response: `amount_rtc = 126.0`, history count `10`.
 
-## 1. First paid bounty — BoTTube/RustChain #1102 — 5 RTC
-- Report: official JS/TS SDK `health()` type was `{status, timestamp}` while the live `/health` payload is `{ok, service, version, uptime_s, videos, agents, humans}`.
-- Public report: `earn/bottube-1102-js-sdk-health-contract.md`.
-- Sophia Elya accepted it as a **functional bug** for **5 RTC**.
-- Idempotency key: `markabramov1993-1102-sdk-health-type`.
-- Public #1102 receipt names `@markabramov1993` as accepted.
-- 24h hold elapsed and live wallet history proves settlement.
-- **State: CONFIRMED / PAID.**
+This **126 RTC is cleared/received capital**. It is not a bounty face value or pending reward.
 
-## 2. Second/final #1102 item — mobile false-success login — requested 5 RTC
-- Fresh source audit found `mobile-app/src/api/client.ts::login(agentName, apiKey)` fetches the public `/api/agents/<name>` profile with `includeAuth=false`, then persists whatever API-key string was supplied.
-- `mobile-app/src/hooks/useAuth.ts` immediately sets `isAuthenticated=true` from that public-profile success.
-- `/api/agents/<name>` is explicitly documented as public/no-auth; later authenticated calls such as `getMe()` expose the invalid key.
-- This is a client-side false-success authentication state, **not** a server authorization bypass.
-- Strong open/closed duplicate searches found no issue describing this exact path.
-- Public report: `earn/bottube-1102-mobile-login-does-not-validate-api-key.md`.
-- Submitted once by documented 403 email fallback on 2026-09-10 as the **second and final** item under `cap: 2`.
-- Requested classification: functional bug, 5 RTC, subject to maintainer verification.
-- **State: PIPELINE.**
+## 1. Confirmed receipts
 
-## 3. Other short payout requests
+### Original 5 RTC
 
-### RustChain #13949 — README badge — 2 RTC
-- Existing real repo: `markabramov1993/arbitr`.
-- RustChain badge verified in README.
-- Canonical claim already exists; no public receipt yet. Do not send another duplicate.
-- **State: PIPELINE.**
+- Source: BoTTube/RustChain #1102 JS SDK `health()` contract mismatch.
+- Tx: `b5034bc573d119c8b74c0b9773afa88c`
+- Amount: **5 RTC**
+- State: **CONFIRMED / PAID**.
 
-### Contributor Registry #1575 — canonical 3–5 RTC ambiguity
-- `markabramov1993` remains absent from the registry at 2026-09-10 check.
-- Direct issue creation is blocked by external GitHub App permissions (`403`).
-- Registration was sent through documented fallback; an additional Sep 10 fallback already exists, so **send nothing further** until maintainer response.
-- Registry/template says 5 RTC while bounty title has shown a lower amount; maintainer chooses canonical current rate.
-- **State: PIPELINE.**
+### September 11 adjudication — 121 RTC, now settled
 
-### RustChain #1579 — contextual Elyan Labs mention — 3 RTC
-- Existing `arbitr` repo predates the bounty and contains original work.
-- README has a contextual Elyan Labs section in commit `c43c34329ae8076d60a720ca8a65472cf6f063dc`.
-- Claim already sent through documented fallback; no public receipt yet.
-- **State: PIPELINE.**
+Sophia Elya confirmed all Sept 9–11 submissions below as paid with a 24-hour hold. The hold has elapsed and the wallet now independently reports the funds.
 
-### RustChain #100 — Discovery Mode — 2 RTC
-- First-discovery claim for `Scottcjn/beacon-skill` already sent after checking prior claim history.
-- **State: PIPELINE.**
+| Work | Amount | Wallet-history tx | State |
+|---|---:|---|---|
+| #315 Human Funnel Stage 1 asset pack | 30 RTC | `9bffbd87c18a1e6de798173cafd04dd6` | CONFIRMED |
+| #398 Step 2 — Mock Signature Mode reproduction + CI | 15 RTC | `a7c4d95baf408665f316143810fdf647` | CONFIRMED |
+| #16601 Type C Shorts kit | 15 RTC | `f1ae62e6bdaf98bd9509db05d50e32c7` | CONFIRMED |
+| #16497 Tutorial 1 — miner dry-run, draft tranche | 13 RTC | `a002133631334223d5399dff2970c84f` | CONFIRMED |
+| #16497 Tutorial 2 — Beacon liveness, draft tranche | 13 RTC | `44c64730923966fbf28732f77ae11591` | CONFIRMED |
+| #398 Step 1 security assessment | 10 RTC | `f1adea86bf1ea35c1cfe95c63ef766cc` | CONFIRMED |
+| #13954 Proof-of-Antiquity infographic | 10 RTC | `0d19ee39eac9371780afaa79aa5bd140` | CONFIRMED |
+| #13224 RIP-0301 identity-churn critique | 10 RTC | `569ec2ed091baa3b076202b20489fdd1` | CONFIRMED |
+| #1102 mobile login false-success | 5 RTC | `5357aa747f2db68d1d22612b2310a540` | CONFIRMED |
 
-### RustChain #16497 — two draft-acceptance tranches — 13 + 13 RTC
-- Two long-form tutorials originally submitted Sep 4, before the Sep 8 Live-URL rule change.
-- Beacon tutorial copy/paste bug corrected before follow-up (`600401ec7d1eaa0c56a1b2bc6de508c28f98a787`).
-- Follow-up requests only the **13 RTC draft-acceptance tranche per article**; a Sep 10 reconciliation note explicitly says it is not a new/duplicate claim.
-- No inbound acceptance yet. Do not send more follow-ups now.
-- **State: PIPELINE.**
+Subtotal: **121 RTC**. Together with the original 5 RTC: **126 RTC confirmed**.
 
-## 4. Mermail / Superteam — submitted competition
+## 2. Highest-value receivable path — #16497 +40 RTC
+
+Two already accepted long-form tutorials each have an additional **20 RTC live-publication tranche**.
+
+Requirements confirmed by maintainer:
+- publish each tutorial on an allowlisted off-platform host: Dev.to, Hashnode, Medium or Substack;
+- keep each Live-URL publicly accessible under the claimant/byline for seven days;
+- GitHub does not count as the article home.
+
+Remaining upside: **40 RTC**.
+
+Current blocker: authenticated browser/desktop connector is offline, so native publication has not been completed. Do not fabricate a Live-URL or claim the second tranche early.
+
+State: **ACCEPTED WORK / CONDITIONAL SECOND TRANCHE, not yet receivable until publication + seven days**.
+
+## 3. Fresh submissions awaiting adjudication
+
+- #2784 RustChain miner dry-run hardware report — submitted once by documented email fallback on 2026-09-13. **PIPELINE**.
+- #12442 RustChain vs Helium / DePIN comparison — submitted once 2026-09-12. **PIPELINE**.
+- #12444 Proof of Antiquity vs Proof of Storage comparison — submitted once 2026-09-12. **PIPELINE**.
+- #16601 historical Type B (15 RTC) + Type D (+8 RTC) — one reconciliation email sent 2026-09-12; not a new duplicate claim. **PIPELINE / maintainer reconciliation**.
+
+Do not resend or chase these while normal review is pending.
+
+## 4. Mermail / Superteam
+
+- Build and Demo a Mermail Agent Skill.
 - Advertised prize pool: **500 USDC total**.
-- Superteam sent `Submission Received!` on 2026-09-09.
-- Official PR `Nudgen-Marketing/mermail-skills#174` is **open, mergeable, not merged** at 2026-09-10 check.
-- No maintainer acceptance/payment evidence.
-- **State: PIPELINE, not RECEIVABLE.**
+- Superteam entry submitted; prior UI verification showed `Edit Submission` and one credit consumed.
+- Official PR: `Nudgen-Marketing/mermail-skills#174`.
+- Demo video: `https://x.com/LeadsOleg/status/2096249643604570579`.
+- Tagged post: `https://x.com/LeadsOleg/status/2096354167971271154`.
+- No sponsor winner/payment evidence yet.
 
-## 5. Mova Labs #91 — archived / no longer counted
-- Issue #91 was completed through upstream work that is not our PR.
-- Our PR #257 remains open but is currently non-mergeable and has no maintainer acceptance/payment.
-- Do not spend more time here unless maintainer explicitly revives/payably requests the contribution.
-- **State: ARCHIVED / CLOSED ELSEWHERE.**
+State: **PIPELINE, not RECEIVABLE/CONFIRMED**.
 
-## 6. Occupied / archived lanes
-- RustChain #16601 Type C: earlier accepted Type C submission makes our historical packages low probability. **OCCUPIED.**
-- Lilly batch formerly $635 nominal: all nine relevant issues closed elsewhere without acceptance of our work. **ARCHIVED.**
-- Mova #53/#60, Claude Builders #1 and similar older fallback submissions remain unconfirmed and low priority.
+## 5. RTC -> wRTC/USDC conversion status
 
-## 7. RTC conversion / FLASH gate
-- RustChain current source exposes `/wallet/swap-info` for a Base-network wRTC/USDC route and identifies an Aerodrome pool, but source configuration/reference pricing is **not proof of current executable liquidity**.
-- 5 RTC is confirmed seed capital, but no conversion or live trade is authorized merely by its existence.
-- Before any conversion/execution: verify live swap endpoint, bridge mechanics, pool reserves/quote, gas requirement, slippage and whether the exact amount is economically usable.
+A withdrawal/bridge clarification was sent to Sophia on 2026-09-12 after the 121 RTC adjudication. No reply has arrived yet.
+
+Current official RustChain docs state:
+- native RTC -> wRTC/Solana is **operator-assisted/admin-authenticated**, not public self-service;
+- `/api/bridge/initiate` for RustChain-origin deposits requires an operator `X-Admin-Key` and configured `RC_ADMIN_KEY`;
+- minimum documented bridge amount defaults to 1 RTC;
+- public routing may intentionally not expose the management route.
+
+Therefore:
+- **No bridge has been initiated.**
+- **No wRTC or USDC has been received.**
+- Do not send RTC to any address copied from another user's bridge request.
+- Do not expose any private key/seed phrase.
+- Wait for the official operator procedure or an authenticated official portal before moving the 126 RTC.
+
+## 6. Archived / occupied work
+
+- Lilly batch formerly $635 nominal: all relevant upstream issues closed elsewhere without acceptance of our fallback work. **ARCHIVED**.
+- Mova #91: issue resolved through competing upstream work; our PR is no longer a high-probability payout path. **ARCHIVED / OCCUPIED**.
+- #1102 contributor cap is exhausted for `markabramov1993`. **DO NOT SUBMIT MORE**.
+- #13224 is one claim per contributor and already paid. **DO NOT SUBMIT MORE**.
+
+## 7. FLASH activation rule
+
+126 RTC is real seed capital, but it is not automatically usable as trading capital on EVM/Solana.
+
+Before any live FLASH transaction:
+1. obtain the official RTC -> wRTC/USDC custody/bridge procedure;
+2. verify exact bridge destination and fees/minimums;
+3. verify current executable wRTC liquidity/quote, gas and slippage;
+4. start with a small test tranche if the official operator supports it;
+5. reconcile the resulting bridge/chain receipt before any larger movement;
+6. only then evaluate current arbitrage/liquidation execution economics.
 
 ## 8. Operating rules
-1. Search canonical issue state, maintainer history, linked PRs and SENT mail before every claim/bid.
-2. No duplicate claims or duplicate follow-up emails.
-3. Prefer funded, open, unoccupied, explicit payout paths.
-4. `CONFIRMED` requires actual receipt; `RECEIVABLE` requires explicit acceptance; everything else stays PIPELINE/PREPARED/ARCHIVED.
-5. Re-run RTC balance/history after any acceptance/payment signal.
-6. No live FLASH trading until asset usability/conversion, current-state strategy economics and failure bounds are independently verified.
+
+1. No duplicate claims/submissions or duplicate follow-up emails.
+2. Check issue state, comments, competing PRs, caps and funding before new work.
+3. Prefer explicit pay-on-acceptance, low-capital, globally eligible work.
+4. `CONFIRMED` requires a real receipt; `RECEIVABLE` requires explicit acceptance and a due payment; all else stays PIPELINE/PREPARED/ARCHIVED.
+5. Re-run the wallet balance/history after every acceptance/payment signal.
+6. Never risk the confirmed seed capital merely to qualify for another bounty.
+7. Never fabricate social activity, transactions, users, publication URLs or settlement evidence.
