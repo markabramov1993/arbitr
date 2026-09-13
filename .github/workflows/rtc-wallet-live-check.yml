@@ -9,8 +9,8 @@ on:
 permissions:
   contents: read
 
-# Live balance probe refreshed 2026-09-12 after Sophia's 121 RTC adjudication notice.
-# Refresh token: 2026-09-12T15:17+02:00
+# Live balance probe refreshed 2026-09-13 after the 121 RTC 24-hour hold window elapsed.
+# Refresh token: 2026-09-13T15:19+02:00
 jobs:
   check:
     runs-on: ubuntu-latest
