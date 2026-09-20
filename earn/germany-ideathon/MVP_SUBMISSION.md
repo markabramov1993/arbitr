@@ -11,6 +11,18 @@ ProofRoute — Verifiable DeFi Execution for Autonomous Agents
 ## One-line pitch
 Agents can find opportunities. ProofRoute makes them prove the trade before capital moves.
 
+## Live Solana/Jupiter evidence
+
+A read-only Jupiter quote was fetched and validated in CI on 2026-09-20:
+- 0.1 SOL -> USDC
+- quoted output: 10.825722 USDC
+- context slot: 448719060
+- route steps: 1
+- canonical evidence hash: `3d6e1249ca9d42d98d0945e1b53a0c94163550d69ab4c0f8ec02fa6871b9da96`
+- run: https://github.com/markabramov1993/arbitr/actions/runs/35508130762
+
+No wallet or transaction was used. Full snapshot: `earn/germany-ideathon/mvp/JUPITER_EVIDENCE.md`.
+
 ## Current MVP evidence
 - Runnable policy engine: earn/germany-ideathon/mvp/proofroute.py
 - 8 deterministic invariant tests: earn/germany-ideathon/mvp/test_proofroute.py
@@ -35,7 +47,7 @@ The current demo never moves user funds. The next value-moving phase is a bounde
 ## Remaining before native submission
 - replace development Anchor program id with generated devnet program id;
 - deploy the program to Solana devnet;
-- connect one bounded Jupiter quote/simulation adapter;
+- feed the live Jupiter evidence snapshot into the verifier/intent flow and add bounded devnet execution;
 - record a short demo video;
 - submit the Superteam form once authenticated browser access is restored.
 
