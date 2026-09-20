@@ -23,6 +23,8 @@ jobs:
         run: forge test --match-contract MorphoSelfFundedLiquidatorV2SafetyTest -vv
       - name: Test Aave flash arbitrage executor safety invariants
         run: forge test --match-contract FlashArbExecutorSafetyTest -vv
+      - name: Gate current Base routes through real Aave V3 flash loan
+        run: forge test --match-contract BaseAaveFlashArbLiveTest -vv
       - name: Inspect live Base SVR aggregators
         shell: bash
         run: |
