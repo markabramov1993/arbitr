@@ -1,0 +1,25 @@
+name: Base Aave Flash Gate
+on:
+  push:
+    branches: [profit-engine-v07]
+    paths:
+      - 'contracts/AtomicRouteHarness.sol'
+      - 'contracts/FlashArbExecutor.sol'
+      - 'test/BaseAaveFlashArbLive.t.sol'
+      - '.github/workflows/base-aave-flash-gate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  flash-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Build flash executor
+        run: forge build
+      - name: Run current Base Aave flash route matrix
+        run: forge test --match-contract BaseAaveFlashArbLiveTest -vv
