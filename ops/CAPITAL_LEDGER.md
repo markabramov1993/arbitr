@@ -1,88 +1,100 @@
 # PROFIT ENGINE — Capital Ledger
 
-Updated: **2026-09-12 live audit**
+Updated: **2026-09-20 live audit**
 
-This ledger separates money actually received from receivables, pending settlement, open bounty pipeline and simulated trading PnL.
+This ledger separates money actually received from receivables, open bounty pipeline and simulated trading PnL.
 
 ## 1. Confirmed capital
 
 | Bucket | Confirmed amount | Evidence |
 |---|---:|---|
-| Cash / stablecoin bounty payouts | **$0** | No fiat/stablecoin payout received yet |
-| RTC spendable/settled | **5.0 RTC** | Live RustChain probe on 2026-09-12 13:19 UTC returned `amount_rtc: 5.0`; confirmed transfer `b5034bc573d119c8b74c0b9773afa88c` |
+| Cash / stablecoin bounty payouts | **$0** | No fiat/stablecoin payout received |
+| RTC settled in RustChain wallet | **126.1 RTC** | Live wallet probe 2026-09-20: `amount_rtc: 126.1`, HTTP 200, 11 settled inbound transfers |
 | DeFi execution profit | **$0** | No settled live FLASH execution |
 
-**CONFIRMED seed capital right now = 5.0 RTC + $0 fiat/stablecoin.**
+**Important:** 126.1 RTC is real settled RustChain balance, but it is **not usable FLASH seed capital** while RustChain has no supported RTC→wRTC/Solana/USDC off-ramp. Maintainer email on Sep 14 explicitly says the off-ramp is paused/not supported.
 
-## 2. Paid but still in RustChain 24-hour hold
+## 2. Reconciled payout history
 
-Sophia Elya adjudicated the Sep 9–11 batch and explicitly reported **121 RTC paid** to `RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d`, subject to the network's 24-hour hold.
+Live wallet history on Sep 20 returned 11 settled inbound transfers totaling **126.1 RTC**:
 
-The 2026-09-12 13:19 UTC live probe independently shows **nine pending inbound transfers totaling 121 RTC** from `founder_community`; current spendable balance is still 5 RTC.
+- 30 RTC — #315 Stage 1 asset pack
+- 15 RTC — #398 Step 2 Mock Signature Mode reproduction
+- 15 RTC — #16601 Type C Shorts kit
+- 13 RTC — #16497 tutorial 1 draft tranche
+- 13 RTC — #16497 tutorial 2 corrected draft tranche
+- 10 RTC — #398 Step 1 security assessment
+- 10 RTC — #13954 Proof-of-Antiquity infographic
+- 10 RTC — #13224 identity-churn critique
+- 5 RTC — #1102 mobile-login false-success
+- 5 RTC — #1102 JS SDK health() return-type mismatch
+- 0.1 RTC — #16863 contributor feedback, confirmed Sep 19
 
-| Source | RTC | Current state |
-|---|---:|---|
-| #315 Stage 1 asset pack | 30 | PAID / pending hold |
-| #398 Step 2 Mock Signature Mode reproduction | 15 | PAID / pending hold |
-| #16601 Type C Shorts kit | 15 | PAID / pending hold |
-| #16497 tutorial 1 draft tranche | 13 | PAID / pending hold |
-| #16497 tutorial 2 draft tranche | 13 | PAID / pending hold |
-| #398 Step 1 security assessment | 10 | PAID / pending hold |
-| #13954 Proof-of-Antiquity infographic | 10 | PAID / pending hold |
-| #13224 identity-churn critique | 10 | PAID / pending hold |
-| #1102 mobile login false-success | 5 | PAID / pending hold |
+The earlier 24-hour holds have cleared. These RTC are no longer pending.
 
-**Pending settlement total = 121 RTC.** If all nine holds clear normally, spendable RTC should become **126 RTC**. Do not count the 121 as confirmed spendable capital until the wallet balance/history changes from `pending`.
+## 3. Highest-confidence remaining payout
 
-The pending transfers were created around 2026-09-11 16:18–16:20 CEST, so the 24-hour hold should expire around 2026-09-12 16:18–16:20 CEST. Re-query after that window.
+### #16497 off-platform publication — 40 RTC
+Both accepted tutorials have a further **20 RTC each** once an allowlisted off-platform Live-URL has remained live for seven days.
 
-## 3. Remaining active payout paths
+Accepted publication surfaces from maintainer correspondence: dev.to, Hashnode, Medium, Substack. Current bounty rules also allow an own blog on an own domain.
 
-| Opportunity | Face value | State |
-|---|---:|---|
-| #16497 tutorial 1 live-publication tranche | 20 RTC | AVAILABLE after allowlisted off-platform article stays live 7 days |
-| #16497 tutorial 2 live-publication tranche | 20 RTC | AVAILABLE after allowlisted off-platform article stays live 7 days |
-| #1575 Contributor Registry | 3–5 RTC rate ambiguity | PIPELINE — email fallback already sent; do not duplicate |
-| #1579 contextual Elyan Labs README mention | 3 RTC | PIPELINE — email fallback already sent |
-| #13949 README badge | 2 RTC | PIPELINE — prior claim already sent |
-| #100 Discovery Mode | 2 RTC | PIPELINE — prior claim already sent |
-| Mermail / Superteam | 500 USDC prize pool | PIPELINE — submitted; PR #174 open/mergeable |
+Publication-ready source files:
+- `earn/offplatform/rustchain-miner-dryrun-publication.md`
+- `earn/offplatform/beacon-liveness-publication.md`
 
-The #1102 contributor cap is exhausted: the first 5 RTC item is confirmed and the second 5 RTC item is in the 121 RTC paid batch. Do not submit additional #1102 claims unless maintainers explicitly reopen capacity.
+Interactive publishing is currently blocked because the Remote Desktop device is offline and Opera Browser Connector is disconnected. Do not claim the 40 RTC until real Live-URLs exist and survive the verifier window.
 
-## 4. Downgraded / archived
+## 4. Platform-backed USDG lane
 
-- **Mova Store #91 / $90:** issue completed via other upstream work; our PR #257 has no acceptance/payment. ARCHIVED unless maintainer explicitly revives it.
-- **Lilly batch formerly $635 nominal:** closed elsewhere with no acceptance evidence. ARCHIVED.
-- Stale mirrored bounty values and occupied/assigned tasks are not pipeline.
+### Superteam Germany — Road to Colosseum: Build your MVP
+- **8,000 USDG total prize pool**
+- Germany-only; user is eligible
+- 10 prize places (2,000 / 1,500 / 1,100 / 800 / 650 / 500 / 450 / 400 / 350 / 250 USDG)
+- Only **2 submissions** on the current listing crawl
+- Winner announcement scheduled for **2026-10-09**
+- ProofRoute is the primary candidate to turn into an actual Solana MVP.
 
-## 5. Capital usability / conversion gate
+This is a judged prize competition: **PIPELINE/PREPARED**, never confirmed capital until selected and paid.
 
-Native RTC is not automatically liquid EVM capital. RustChain documentation has bridge/swap surfaces, but a verified user-controlled conversion path, liquidity quote, gas requirement and slippage economics are still required before treating RTC as usable FLASH trading capital.
+### Mermail / Superteam
+- 500 USDC prize pool
+- Submission already filed
+- Upstream PR #174 remains the code-review surface
+- No prize acceptance/payment evidence yet
 
-The 5 spendable RTC remains ring-fenced. The 121 pending RTC remains non-spendable until the hold clears.
+## 5. RustChain research lane
+- #16471 payout-pipeline audit remains eligible only for genuinely new silent-success defects.
+- Known duplicates must not be resubmitted.
+- #1102 cap is exhausted for this contributor.
+- #1575 and #1579 were already submitted through fallback; no duplicates.
+- #16253 is actively claimed by another contributor; skipped.
 
-## 6. Capital ladder
+## 6. Archived / lower probability
+- Mova #91: no acceptance/payment; competing/overlapping upstream work.
+- Lilly former $635 nominal batch: closed upstream without our acceptance evidence.
+- Stale/occupied/scraped bounty values are not pipeline.
 
-1. **BOOTSTRAP — ACHIEVED:** first external reward settled: 5 RTC.
-2. **PAYOUT ACCUMULATION — ACTIVE:** 121 RTC paid and in network hold.
-3. **CONFIRM RELEASE:** verify wallet reaches 126 RTC and pending records settle.
-4. **CONVERSION CHECK:** verify an actual user-accessible bridge/swap route and total economics.
-5. **LIVE MICRO-EXECUTION:** only after deterministic current-state simulation with fees, gas and slippage.
-6. **FLASH-LIQUIDITY EXECUTION:** only when exact execution remains net-positive under conservative assumptions.
+## 7. Capital ladder
+
+1. **BOOTSTRAP — ACHIEVED:** 126.1 RTC has actually settled.
+2. **OFF-RAMP GATE — BLOCKED:** maintainer states no supported RTC conversion path.
+3. **USD/STABLECOIN SEED — $0:** only external stablecoin/fiat receipts count for FLASH trading.
+4. **PAYOUT EXPANSION — ACTIVE:** pursue #16497 40 RTC, Superteam Germany 8,000 USDG pool, and new funded work.
+5. **LIVE MICRO-EXECUTION:** only after usable seed exists and exact route passes deterministic current-state simulation.
+6. **FLASH-LIQUIDITY EXECUTION:** only when exact execution remains net-positive after all costs.
 7. **SCALE FROM REALIZED PROFIT:** never from bounty face value or paper PnL.
 
-## 7. Accounting states
+## 8. Accounting states
 
-- **CONFIRMED** — money/token actually spendable/received or settled on-chain.
-- **PAID / HOLD** — maintainer sent it and wallet history shows a pending transfer, but it is not spendable yet.
-- **RECEIVABLE** — explicitly accepted and payment is due, but no transfer is visible yet.
+- **CONFIRMED** — actually received/settled.
+- **RECEIVABLE** — explicitly accepted and payment due, not yet received.
 - **PIPELINE** — submitted/open, not accepted.
-- **PREPARED** — deliverable ready but not submitted.
+- **PREPARED** — deliverable ready but not natively submitted.
 - **FORK** — transaction succeeded only in simulation/fork.
 - **PAPER** — calculated opportunity, not executed.
 - **ARCHIVED / REJECTED / OCCUPIED** — no longer a current expected payout path.
 
-## 8. Execution safety gate
+## 9. Execution safety gate
 
-Confirmed capital exists, but native RTC requires a verified conversion/use path before it can fund FLASH execution. No private key/seed phrase in repo/CI; no fabricated users, wash volume, duplicate identities or prohibited activity. Every live transaction requires independently verified asset usability, current-state economics and bounded failure loss.
+Do not move RTC based on unsupported bridge claims, public comments, copied addresses, or unofficial swap routes. No private key/seed phrase in repo/CI. FLASH stays at **$0 usable seed** until a supported, independently verifiable liquid asset receipt exists.
