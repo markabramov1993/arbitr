@@ -129,7 +129,7 @@ def cycle(size: float, path: tuple[str, str, str, str]):
     for tin, tout in zip(path, path[1:]):
         q = best_quote(tin, tout, amount)
         if not q:
-            return None
+            return {"unavailable_leg": f"{tin}->{tout}", "amount_in": amount}
         q = dict(q)
         q.update({"token_in": tin, "token_out": tout, "amount_in": amount})
         legs.append(q)
@@ -153,8 +153,8 @@ def main():
         for path in paths:
             try:
                 r = cycle(size, path)
-                if not r:
-                    print(json.dumps({"kind": "unavailable", "size_usdc": size, "path": "->".join(path)}, separators=(",", ":")))
+                if "unavailable_leg" in r:
+                    print(json.dumps({"kind": "unavailable", "size_usdc": size, "path": "->".join(path), **r}, separators=(",", ":")))
                     continue
                 gas_units = sum(int(x["gas"]) for x in r["legs"]) + 220_000
                 gas_usd = gas_units * gp / 1e18 * eth_usd + 0.12
