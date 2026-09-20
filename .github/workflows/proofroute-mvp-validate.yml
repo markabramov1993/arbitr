@@ -15,7 +15,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -37,3 +37,5 @@ jobs:
           assert len(data['receipt']['receipt_hash']) == 64
           print('ProofRoute demo validation: PASS')
           PY
+      - name: Anchor program cargo check
+        run: cargo check --manifest-path earn/germany-ideathon/mvp/anchor/programs/proofroute/Cargo.toml
