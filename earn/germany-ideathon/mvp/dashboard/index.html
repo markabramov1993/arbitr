@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ProofRoute MVP Demo</title>
+<style>
+body{font-family:Inter,system-ui,sans-serif;background:#08111d;color:#eef5ff;margin:0}
+main{max-width:1050px;margin:auto;padding:32px 20px 64px}
+h1{font-size:42px;margin-bottom:8px}.tag{color:#7de7c4}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.card{background:#101d2c;border:1px solid #233750;border-radius:14px;padding:18px}
+.good{border-color:#2d9d78}.bad{border-color:#b94f67}.muted{color:#9fb1c8}
+code{font-family:ui-monospace,monospace}button{background:#7de7c4;color:#08111d;border:0;border-radius:10px;padding:12px 18px;font-weight:700;cursor:pointer}
+.row{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid #26374b;padding:8px 0}
+.badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#213448;font-size:12px}
+.pass{background:#174b3d}.reject{background:#54273a}
+</style>
+</head>
+<body><main>
+<p class="tag">SUPERTEAM GERMANY · ROAD TO COLOSSEUM MVP</p>
+<h1>ProofRoute</h1>
+<p class="muted">Pre-trade proof and post-trade receipts for autonomous agents.</p>
+<p><button id="run">Run verification demo</button></p>
+<div class="grid">
+<section class="card"><h2>Capital policy</h2>
+<div class="row"><span>Max input</span><code>1,000,000</code></div>
+<div class="row"><span>Min output</span><code>1,008,000</code></div>
+<div class="row"><span>Verifier quorum</span><code>2</code></div>
+<div class="row"><span>Max spread</span><code>25 bps</code></div>
+</section>
+<section class="card" id="good"><h2>Agent A intent</h2><p class="muted">USDC → SOL → USDC</p><div id="good-status" class="badge">waiting</div><div id="good-body"></div></section>
+<section class="card" id="bad"><h2>Agent B intent</h2><p class="muted">USDC → ALT → USDC</p><div id="bad-status" class="badge">waiting</div><div id="bad-body"></div></section>
+</div>
+<section class="card" style="margin-top:14px"><h2>Execution receipt</h2><div id="receipt" class="muted">No capital authorized yet.</div></section>
+<script>
+const fmt=n=>new Intl.NumberFormat('en-US').format(n);
+function hashDemo(s){let h=2166136261;for(const c of s){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return ('00000000'+(h>>>0).toString(16)).slice(-8)}
+document.getElementById('run').onclick=()=>{
+ const policy={maxInput:1000000,minOutput:1008000,quorum:2,maxSpreadBps:25};
+ const verified=[1011900,1012000];
+ const med=Math.floor((verified[0]+verified[1])/2);
+ const spread=Math.floor((Math.max(...verified)-Math.min(...verified))*10000/med);
+ const ok=verified.length>=policy.quorum&&med>=policy.minOutput&&spread<=policy.maxSpreadBps;
+ const badOut=1003000;
+ document.getElementById('good-status').className='badge pass';
+ document.getElementById('good-status').textContent=ok?'AUTHORIZED':'REJECTED';
+ document.getElementById('good').className='card '+(ok?'good':'bad');
+ document.getElementById('good-body').innerHTML='<div class="row"><span>Verifier east</span><code>'+fmt(verified[0])+'</code></div><div class="row"><span>Verifier west</span><code>'+fmt(verified[1])+'</code></div><div class="row"><span>Median</span><code>'+fmt(med)+'</code></div><div class="row"><span>Spread</span><code>'+spread+' bps</code></div>';
+ document.getElementById('bad-status').className='badge reject';
+ document.getElementById('bad-status').textContent='REJECTED';
+ document.getElementById('bad').className='card bad';
+ document.getElementById('bad-body').innerHTML='<div class="row"><span>Reproduced output</span><code>'+fmt(badOut)+'</code></div><div class="row"><span>Reason</span><code>below_min_output</code></div>';
+ const actual=1010500, slip=Math.floor((med-actual)*10000/med);
+ const receipt={intent:'intent-profitable-001',actual_input:1000000,actual_output:actual,verified_output:med,fee_paid:500,slippage_bps:slip};
+ document.getElementById('receipt').innerHTML='<div class="row"><span>Intent</span><code>'+receipt.intent+'</code></div><div class="row"><span>Actual output</span><code>'+fmt(actual)+'</code></div><div class="row"><span>Verified→actual slippage</span><code>'+slip+' bps</code></div><div class="row"><span>Receipt fingerprint</span><code>'+hashDemo(JSON.stringify(receipt))+'</code></div>';
+};
+</script>
+</main></body></html>
