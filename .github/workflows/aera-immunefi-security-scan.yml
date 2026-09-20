@@ -51,6 +51,7 @@ jobs:
           optimizer_runs = 200
           remappings = [
             "@oz/=lib/openzeppelin-contracts/contracts/",
+            "@solmate/SSTORE2.sol=lib/solmate/src/utils/SSTORE2.sol",
             "@solmate/=lib/solmate/src/",
             "src/=src/"
           ]
