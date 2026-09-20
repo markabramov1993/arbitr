@@ -31,7 +31,7 @@ jobs:
           set -euo pipefail
           curl -L -fsS 'https://earn.superteam.fun/api/listings?take=100' -o listings.json
           python3 - <<'PY' | tee superteam-agent-radar.md
-          import json,datetime,os
+          import json,datetime,os,re
           d=json.load(open('listings.json'))
           rows=d if isinstance(d,list) else d.get('listings',d.get('data',d.get('items',[])))
           if isinstance(rows,dict): rows=rows.get('data',rows.get('items',[]))
@@ -55,6 +55,26 @@ jobs:
               if isinstance(rewards,dict):
                   for v in rewards.values():
                       if isinstance(v,(int,float)): total=max(total,float(v))
+                      elif isinstance(v,dict):
+                          for vv in v.values():
+                              if isinstance(vv,(int,float)): total=max(total,float(vv))
+              elif isinstance(rewards,list):
+                  for v in rewards:
+                      if isinstance(v,(int,float)): total=max(total,float(v))
+                      elif isinstance(v,dict):
+                          for k in ('amount','reward','prize','value'):
+                              vv=v.get(k)
+                              if isinstance(vv,(int,float)): total=max(total,float(vv))
+              # Public feed currently omits structured prize totals for some listings
+              # even when the title says e.g. "Win 500 USDC". Parse only amounts
+              # syntactically tied to an explicit stablecoin/USD unit to avoid fake
+              # reward values from dates, counts, or arbitrary numbers.
+              title=str(x.get('title') or '')
+              desc=str(x.get('description') or x.get('shortDescription') or '')
+              for text in (title, desc):
+                  for m in re.finditer(r'(?i)(?:\\$\\s*)?([0-9][0-9,]*(?:\\.[0-9]+)?)\\s*(USDC|USDG|USD)\\b', text):
+                      try: total=max(total,float(m.group(1).replace(',','')))
+                      except ValueError: pass
               out.append((total,x))
           out.sort(key=lambda p:p[0],reverse=True)
           print('# Superteam agent-eligible live radar')
