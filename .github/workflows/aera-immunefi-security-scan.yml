@@ -40,7 +40,9 @@ jobs:
           cd aera-public/v3
           mkdir -p lib
           git clone --depth 1 https://github.com/OpenZeppelin/openzeppelin-contracts.git lib/openzeppelin-contracts
-          git clone --depth 1 https://github.com/transmissions11/solmate.git lib/solmate
+          git clone --no-checkout https://github.com/transmissions11/solmate.git lib/solmate
+          git -C lib/solmate fetch --depth 1 origin eaa7041378f9a6c12f943de08a6c41b31a9870fc
+          git -C lib/solmate checkout eaa7041378f9a6c12f943de08a6c41b31a9870fc
           cat > foundry.toml <<'EOF'
           [profile.default]
           src = "src"
