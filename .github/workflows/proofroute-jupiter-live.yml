@@ -1,0 +1,32 @@
+name: ProofRoute Jupiter Live Quote
+on:
+  push:
+    branches: [earn/proofroute-mvp]
+    paths:
+      - 'earn/germany-ideathon/mvp/jupiter_quote_probe.py'
+      - '.github/workflows/proofroute-jupiter-live.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  quote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Fetch one read-only Jupiter route quote
+        working-directory: earn/germany-ideathon/mvp
+        run: python jupiter_quote_probe.py | tee /tmp/jupiter-proofroute-quote.json
+      - name: Validate evidence snapshot
+        run: |
+          python - <<'PY'
+          import json
+          x=json.load(open('/tmp/jupiter-proofroute-quote.json'))
+          assert int(x['outAmount']) > 0
+          assert len(x['evidenceHash']) == 64
+          assert x['routeSteps'] >= 1
+          print('Live Jupiter evidence: PASS')
+          PY
