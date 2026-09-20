@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "forge-std/Test.sol";
 import "../contracts/AtomicRouteHarness.sol";
 import "../contracts/FlashArbExecutor.sol";
 
@@ -9,10 +8,21 @@ interface IERC20FlashRoute {
     function balanceOf(address account) external view returns (uint256);
 }
 
+interface VmFlashLocal {
+    function createSelectFork(string calldata urlOrAlias) external returns (uint256 forkId);
+    function snapshotState() external returns (uint256 snapshotId);
+    function revertToState(uint256 snapshotId) external returns (bool success);
+}
+
 /// @notice Current-state Base fork gate for real Aave V3 flash-loan DEX routes.
 /// @dev No private key and no public-chain broadcast. A route counts only if it
 ///      survives the real Aave premium and real router swaps on the latest fork.
-contract BaseAaveFlashArbLiveTest is Test {
+contract BaseAaveFlashArbLiveTest {
+    VmFlashLocal constant vm = VmFlashLocal(address(uint160(uint256(keccak256("hevm cheat code")))));
+
+    event log_named_uint(string key, uint256 val);
+    event log_named_int(string key, int256 val);
+    event log_named_address(string key, address val);
     address constant AAVE_POOL = 0xa238dd80c259a72e81d7e4664a9801593f98d1c5;
     address constant USDC = 0x833589fcd6edb6e08f4c7c32d4f71b54bda02913;
     address constant WETH = 0x4200000000000000000000000000000000000006;
