@@ -44,6 +44,20 @@ interface ICurvePoolLite {
     function exchange(int128 i, int128 j, uint256 dx, uint256 minDy) external returns (uint256);
 }
 
+interface IAerodromeSlipstreamRouterLite {
+    struct ExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        int24 tickSpacing;
+        address recipient;
+        uint256 deadline;
+        uint256 amountIn;
+        uint256 amountOutMinimum;
+        uint160 sqrtPriceLimitX96;
+    }
+    function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256 amountOut);
+}
+
 interface IBalancerV3RouterLite {
     function swapSingleTokenExactIn(
         address pool,
@@ -61,7 +75,7 @@ interface IBalancerV3RouterLite {
 /// @dev It is intentionally NOT a Flash Loan receiver and is not intended for public-chain deployment.
 /// Program format is repeated TLV records:
 /// [kind:1][target:20][tokenIn:20][tokenOut:20][payloadLen:2][payload:N]
-/// kinds: 1=V2 direct pair, 2=V3 exactInputSingle, 3=Curve exchange, 4=Balancer V3 exact-in.
+/// kinds: 1=V2 direct pair, 2=V3 exactInputSingle, 3=Curve exchange, 4=Balancer V3 exact-in, 5=Aerodrome Slipstream.
 contract AtomicRouteHarness {
     error BadProgram();
     error BadToken();
@@ -121,6 +135,15 @@ contract AtomicRouteHarness {
                 IBalancerV3RouterLite(target).swapSingleTokenExactIn(
                     pool, IERC20Lite(tokenIn), IERC20Lite(tokenOut), amount, 0, block.timestamp, false, ""
                 );
+            } else if (kind == 5) {
+                if (payloadLen != 3) revert BadProgram();
+                int24 tickSpacing = _i24(program, payload);
+                _approveMax(tokenIn, target, amount);
+                IAerodromeSlipstreamRouterLite(target).exactInputSingle(
+                    IAerodromeSlipstreamRouterLite.ExactInputSingleParams(
+                        tokenIn, tokenOut, tickSpacing, address(this), block.timestamp, amount, 0, 0
+                    )
+                );
             } else {
                 revert BadProgram();
             }
@@ -178,6 +201,10 @@ contract AtomicRouteHarness {
     function _u24(bytes calldata b, uint256 off) internal pure returns (uint24 v) {
         if (off + 3 > b.length) revert BadProgram();
         assembly { v := shr(232, calldataload(add(b.offset, off))) }
+    }
+    function _i24(bytes calldata b, uint256 off) internal pure returns (int24 v) {
+        if (off + 3 > b.length) revert BadProgram();
+        assembly { v := sar(232, calldataload(add(b.offset, off))) }
     }
     function _u128(bytes calldata b, uint256 off) internal pure returns (uint128 v) {
         if (off + 16 > b.length) revert BadProgram();
