@@ -36,6 +36,7 @@ contract BaseAaveFlashArbLiveTest {
         address asset;
         int24 aeroTick;
         uint24 uniFee;
+        bool buyAero;
     }
 
     function testCurrentAaveFlashRouteMatrix() external {
@@ -44,10 +45,11 @@ contract BaseAaveFlashArbLiveTest {
         FlashArbExecutor executor = new FlashArbExecutor(AAVE_POOL, address(harness), address(this));
 
         Candidate[4] memory routes = [
-            Candidate(WETH, 10, 100),
-            Candidate(WETH, 10, 500),
-            Candidate(CBBTC, 50, 100),
-            Candidate(CBBTC, 1, 100)
+            // Fresh spot shortlist from the live scanner; test both venue directions.
+            Candidate(CBBTC, 50, 100, true),
+            Candidate(CBBTC, 1, 100, true),
+            Candidate(CBBTC, 10, 500, false),
+            Candidate(WETH, 10, 100, false)
         ];
         uint256[6] memory sizes = [
             uint256(100e6),
@@ -77,6 +79,7 @@ contract BaseAaveFlashArbLiveTest {
                         emit log_named_address("FLASH_ASSET", routes[i].asset);
                         emit log_named_int("FLASH_AERO_TICK", int256(routes[i].aeroTick));
                         emit log_named_uint("FLASH_UNI_FEE", routes[i].uniFee);
+                        emit log_named_uint("FLASH_BUY_AERO", routes[i].buyAero ? 1 : 0);
                         emit log_named_uint("FLASH_AMOUNT_USDC_RAW", sizes[j]);
                         emit log_named_uint("FLASH_NET_AFTER_PREMIUM_USDC_RAW", profit);
                         emit log_named_uint("FLASH_GAS_UNITS", gasUsed);
@@ -91,30 +94,39 @@ contract BaseAaveFlashArbLiveTest {
     }
 
     function _program(Candidate memory c) internal pure returns (bytes memory) {
-        bytes memory aeroPayload = abi.encodePacked(bytes3(uint24(c.aeroTick)));
-        bytes memory aero = abi.encodePacked(
+        if (c.buyAero) {
+            return bytes.concat(
+                _aeroLeg(USDC, c.asset, c.aeroTick),
+                _uniLeg(c.asset, USDC, c.uniFee)
+            );
+        }
+        return bytes.concat(
+            _uniLeg(USDC, c.asset, c.uniFee),
+            _aeroLeg(c.asset, USDC, c.aeroTick)
+        );
+    }
+
+    function _aeroLeg(address tokenIn, address tokenOut, int24 tickSpacing) internal pure returns (bytes memory) {
+        bytes memory payload = abi.encodePacked(bytes3(uint24(tickSpacing)));
+        return abi.encodePacked(
             uint8(5),
             AERO_ROUTER,
-            USDC,
-            c.asset,
-            uint16(aeroPayload.length),
-            aeroPayload
+            tokenIn,
+            tokenOut,
+            uint16(payload.length),
+            payload
         );
+    }
 
-        bytes memory uniPayload = abi.encodePacked(
-            uint8(0),
-            bytes3(c.uniFee),
-            bytes20(uint160(0))
-        );
-        bytes memory uni = abi.encodePacked(
+    function _uniLeg(address tokenIn, address tokenOut, uint24 fee) internal pure returns (bytes memory) {
+        bytes memory payload = abi.encodePacked(uint8(0), bytes3(fee), bytes20(uint160(0)));
+        return abi.encodePacked(
             uint8(2),
             UNI_ROUTER,
-            c.asset,
-            USDC,
-            uint16(uniPayload.length),
-            uniPayload
+            tokenIn,
+            tokenOut,
+            uint16(payload.length),
+            payload
         );
-
-        return bytes.concat(aero, uni);
     }
 }
