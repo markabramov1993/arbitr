@@ -72,7 +72,7 @@ jobs:
               title=str(x.get('title') or '')
               desc=str(x.get('description') or x.get('shortDescription') or '')
               for text in (title, desc):
-                  for m in re.finditer(r'(?i)(?:\\$\\s*)?([0-9][0-9,]*(?:\\.[0-9]+)?)\\s*(USDC|USDG|USD)\\b', text):
+                  for m in re.finditer(r'(?i)(?:[$][ ]*)?([0-9][0-9,]*(?:[.][0-9]+)?)[ ]+(USDC|USDG|USD)', text):
                       try: total=max(total,float(m.group(1).replace(',','')))
                       except ValueError: pass
               out.append((total,x))
