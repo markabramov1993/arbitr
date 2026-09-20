@@ -1,0 +1,119 @@
+name: Aera V3 Immunefi Readonly Security Scan
+
+on:
+  push:
+    paths:
+      - '.github/workflows/aera-immunefi-security-scan.yml'
+  schedule:
+    - cron: '47 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout Aera public V3 snapshot
+        run: |
+          git clone --depth 1 https://github.com/aera-finance/aera-contracts-public.git aera-public
+          cd aera-public
+          git rev-parse HEAD | tee ../aera-upstream-sha.txt
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Slither and source dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install slither-analyzer
+          cd aera-public/v3
+          mkdir -p lib
+          git clone --depth 1 https://github.com/OpenZeppelin/openzeppelin-contracts.git lib/openzeppelin-contracts
+          git clone --depth 1 https://github.com/transmissions11/solmate.git lib/solmate
+          cat > foundry.toml <<'EOF'
+          [profile.default]
+          src = "src"
+          out = "out"
+          libs = ["lib"]
+          solc_version = "0.8.34"
+          optimizer = true
+          optimizer_runs = 200
+          remappings = [
+            "@oz/=lib/openzeppelin-contracts/contracts/",
+            "@solmate/=lib/solmate/src/",
+            "src/=src/"
+          ]
+          EOF
+          forge --version
+          slither --version
+
+      - name: Build Aera V3 snapshot
+        id: build
+        working-directory: aera-public/v3
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          forge build 2>&1 | tee ../../aera-forge-build.log
+
+      - name: Run Slither on V3 snapshot
+        id: slither
+        if: always()
+        working-directory: aera-public/v3
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          slither . --compile-force-framework foundry --exclude-low --exclude-informational 2>&1 | tee ../../aera-slither.log
+
+      - name: Summarize in-scope security signals
+        if: always()
+        shell: bash
+        run: |
+          echo "UPSTREAM_SHA=$(cat aera-upstream-sha.txt 2>/dev/null || echo unknown)"
+          echo "BUILD_OUTCOME=${{ steps.build.outcome }}"
+          echo "SLITHER_OUTCOME=${{ steps.slither.outcome }}"
+          echo '--- Aera V3 signals ---'
+          if [ -f aera-slither.log ]; then
+            grep -Ei '(Detector:|reentr|arbitrary|delegatecall|uninitialized|controlled|price|oracle|share|vault|freeze|transfer|callback|whitelist|provision)' aera-slither.log | tail -n 300 || true
+          else
+            echo 'No Slither log produced.'
+          fi
+          echo '--- end signals ---'
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aera-immunefi-readonly-scan
+          path: |
+            aera-upstream-sha.txt
+            aera-forge-build.log
+            aera-slither.log
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Require real compilation and analyzer execution
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ steps.build.outcome }}" != "success" ]; then
+            echo 'SECURITY_SCAN_HEALTH=FAIL forge build did not complete'
+            exit 1
+          fi
+          if [ ! -s aera-slither.log ]; then
+            echo 'SECURITY_SCAN_HEALTH=FAIL no Slither evidence'
+            exit 1
+          fi
+          echo 'SECURITY_SCAN_HEALTH=OK'
