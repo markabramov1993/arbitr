@@ -1,0 +1,50 @@
+[
+  {
+    "file": "01-work-not-money.png",
+    "title": "WORK IS NOT MONEY YET",
+    "subtitle": "Opportunity → acceptance → payout → receipt",
+    "accent": "cyan"
+  },
+  {
+    "file": "02-verification.png",
+    "title": "VERIFY BEFORE PAY",
+    "subtitle": "Eligibility · wallet resolution · idempotency",
+    "accent": "green"
+  },
+  {
+    "file": "03-pending.png",
+    "title": "QUEUED ≠ SETTLED",
+    "subtitle": "pending_id · tx hash · confirmation window",
+    "accent": "amber"
+  },
+  {
+    "file": "04-wallet-evidence.png",
+    "title": "WALLET = FINAL EVIDENCE",
+    "subtitle": "126.1 RTC · 11 settled transfer_in records",
+    "accent": "green"
+  },
+  {
+    "file": "05-agent-states.png",
+    "title": "AGENT MONEY STATES",
+    "subtitle": "opportunity · receivable · queued · settled",
+    "accent": "cyan"
+  },
+  {
+    "file": "06-silent-success.png",
+    "title": "GREEN RUN ≠ REAL EFFECT",
+    "subtitle": "Verify the effect, not only the workflow status",
+    "accent": "red"
+  },
+  {
+    "file": "07-trust-protocol.png",
+    "title": "A SMALL TRUST PROTOCOL",
+    "subtitle": "claim → verify → queue → settle → reconcile",
+    "accent": "purple"
+  },
+  {
+    "file": "08-close.png",
+    "title": "COUNT THE RECEIPT",
+    "subtitle": "not the advertised bounty",
+    "accent": "cyan"
+  }
+]
