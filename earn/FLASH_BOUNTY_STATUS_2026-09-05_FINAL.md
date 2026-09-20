@@ -1,73 +1,65 @@
-# FLASH bounty status — audited 2026-09-12
+# FLASH bounty status — audited 2026-09-20
 
 ## Capital truth
+- **Live settled RTC balance: 126.1 RTC** at `RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d`.
+- Live GitHub Actions probe on Sep 20 returned HTTP 200 for balance/history and **11 settled transfers**.
 - Confirmed USD/stablecoin bounty cash: **$0**.
-- Confirmed spendable RTC: **5.0 RTC** in `RTC7558d7acadad7a32a710459a4c16c0fc1c56f43d`.
-- Paid but still under RustChain 24-hour hold: **121 RTC** across 9 inbound transfers.
-- Current live probe (2026-09-12 13:19 UTC): balance HTTP 200 / `amount_rtc: 5.0`; history HTTP 200 / 10 transactions.
-- If all pending transfers clear normally, spendable total should become **126 RTC** after approximately 16:20 CEST on Sep 12.
-- Bounty face values, prize pools and simulated PnL remain separate from capital.
+- Confirmed DeFi profit: **$0**.
+- RTC is real received value inside RustChain, but maintainer correspondence explicitly says there is currently **no supported RTC→wRTC/Solana/USDC off-ramp**. Therefore usable FLASH trading seed remains **$0**.
 
-## 121 RTC adjudicated batch — PAID / HOLD
-Sophia Elya confirmed all nine Sep 9–11 awards were paid to the wallet with a 24-hour hold. The wallet independently shows matching pending transfers:
+## Reconciled RTC receipts — 126.1 RTC
+- 30 — #315 Stage 1 asset pack
+- 15 — #398 Step 2 Mock Signature Mode reproduction
+- 15 — #16601 Type C Shorts kit
+- 13 — #16497 tutorial 1 draft tranche
+- 13 — #16497 tutorial 2 corrected draft tranche
+- 10 — #398 Step 1 security assessment
+- 10 — #13954 infographic
+- 10 — #13224 identity-churn critique
+- 5 — #1102 mobile login false-success
+- 5 — #1102 JS SDK health() return-type mismatch
+- 0.1 — #16863 contributor feedback (confirmed Sep 19)
 
-- 30 RTC — #315 Stage 1 asset pack.
-- 15 RTC — #398 Step 2 Mock Signature Mode reproduction.
-- 15 RTC — #16601 Type C Shorts kit.
-- 13 RTC — #16497 tutorial 1 draft tranche.
-- 13 RTC — #16497 tutorial 2 draft tranche.
-- 10 RTC — #398 Step 1 security assessment.
-- 10 RTC — #13954 Proof-of-Antiquity infographic.
-- 10 RTC — #13224 identity-churn critique.
-- 5 RTC — #1102 mobile-login false-success (second/final item under contributor cap).
+## #16497 — highest-certainty remaining 40 RTC
+Each accepted tutorial still has a further **20 RTC** tranche after an allowlisted off-platform publication remains live seven days.
 
-Do not mark these 121 RTC as spendable until a post-hold wallet probe confirms settlement.
-
-## Already confirmed before this batch
-- #1102 JS SDK `health()` return-type mismatch: **5 RTC CONFIRMED / PAID**.
-- Confirmed tx: `b5034bc573d119c8b74c0b9773afa88c`.
-
-## #16497 remaining upside — publication package READY
-Each accepted tutorial still has a further **20 RTC** tranche available after an allowlisted off-platform Live-URL (dev.to, Hashnode, Medium, or Substack) remains live for seven days.
-
-Potential remaining #16497 value: **40 RTC**.
-
-Publication-ready versions are now committed:
+Ready files:
 - `earn/offplatform/rustchain-miner-dryrun-publication.md`
 - `earn/offplatform/beacon-liveness-publication.md`
 
-They are not claimed as live publications yet. Browser/account access is required to publish them on an allowlisted host; after publication, record each Live-URL and wait the full seven-day verifier window before claiming the remaining 20+20 RTC.
+Need: two real Live-URLs on dev.to / Hashnode / Medium / Substack (or an accepted own-domain blog), then wait seven days. Do not claim before the verifier condition is satisfied.
 
-## #398 Step 3 private security research
-A private report was sent about missing banned-account enforcement in wRTC bridge authentication. A second routing audit found the originally cited `wrtc_bridge.py` path is legacy/unregistered and the currently registered Solana/Base bridge blueprints are globally disabled by HTTP-410 compliance guards.
+## Superteam Germany — 8,000 USDG MVP bounty
+Fresh listing: **Road to Colosseum Hackathon: Build your MVP**.
+- Germany-only, eligible.
+- 8,000 USDG total.
+- 10 winners; first prize 2,000 USDG.
+- Current public listing showed only **2 submissions**.
+- Winner announcement: Oct 9, 2026.
+- ProofRoute is the build candidate.
 
-A corrective addendum was immediately sent to Sophia: **no current production exploitability is asserted**. The registered bridge auth helpers still omit the `is_banned` predicate, so this is at most a latent authorization defect if those bridges are re-enabled. Do not count the 75 RTC Step 3 reward unless maintainers independently accept a valid previously unknown finding.
+State: **PREPARED/BUILDING**, not submitted or earned yet.
 
 ## Mermail / Superteam
-- Prize pool: **500 USDC**.
-- Submission is filed.
-- Official PR #174 remains open and mergeable; latest check shows no maintainer conversation comments.
-- Accounting: **PIPELINE**, not receivable/confirmed.
+- 500 USDC prize pool.
+- Submission filed.
+- No winner/payment evidence yet.
+- Keep as **PIPELINE**.
 
-## Other existing queue — no duplicate follow-up
-- #1575 Contributor Registry — fallback already sent.
-- #1579 contextual Elyan Labs README mention — fallback already sent.
-- #13949 README badge — prior claim already sent.
-- #100 Discovery Mode — prior claim already sent.
+## RustChain controls
+- #16471: only novel silent-success defects; known duplicates excluded.
+- #1102: contributor cap exhausted.
+- #1575 and #1579: already submitted; no duplicate.
+- #16253: occupied by another active claimant; skipped.
 
-## Archived / lower probability
-- Mova #91: no acceptance/payment and competing upstream resolution.
-- Lilly batch: closed upstream with no acceptance evidence for our fallback work.
-
-## Device / browser
-- Remote Desktop Commander device is currently offline; auth token remains valid.
-- Opera Browser Connector is currently disconnected.
-- Therefore off-platform publication cannot be completed autonomously until one of those interactive surfaces reconnects.
+## Current blockers
+- Remote Desktop Commander device: offline.
+- Opera Browser Connector: disconnected.
+- Those blockers prevent authenticated off-platform publishing and native Superteam form actions right now.
 
 ## Current order
-1. Re-check RTC wallet after ~16:20 CEST Sep 12; if pending transfers settle, update CONFIRMED RTC from 5 to 126.
-2. Publish the two ready #16497 articles on allowlisted off-platform hosts as soon as authenticated browser access is available; then start the seven-day clocks for 40 RTC.
-3. Await #398 Step 3 adjudication on the corrected factual record; do not overstate the latent bridge issue.
-4. Monitor Mermail/Superteam judging without duplicate outreach.
-5. Continue only funded, open, non-duplicate zero-capital tasks.
-6. Do not use native RTC for FLASH until a verified conversion/use path and transaction economics are established.
+1. Build ProofRoute into a real MVP for the 8,000 USDG Germany listing.
+2. Publish the two accepted #16497 articles immediately when an authenticated publishing surface reconnects, starting two 7-day clocks for 40 RTC.
+3. Continue scanning RustChain for novel, funded, non-duplicate defects.
+4. Monitor Mermail/Superteam and existing submissions without spam.
+5. Keep FLASH live trading disabled until usable stablecoin/fiat seed exists.
