@@ -23,12 +23,12 @@ contract BaseAaveFlashArbLiveTest {
     event log_named_uint(string key, uint256 val);
     event log_named_int(string key, int256 val);
     event log_named_address(string key, address val);
-    address constant AAVE_POOL = 0xa238dd80c259a72e81d7e4664a9801593f98d1c5;
-    address constant USDC = 0x833589fcd6edb6e08f4c7c32d4f71b54bda02913;
+    address constant AAVE_POOL = 0xA238Dd80C259a72e81d7e4664a9801593F98d1c5;
+    address constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
     address constant WETH = 0x4200000000000000000000000000000000000006;
-    address constant CBBTC = 0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf;
-    address constant UNI_ROUTER = 0x2626664c2603336e57b271c5c0b26f421741e481;
-    address constant AERO_ROUTER = 0x698cb2b6dd822994581fea6ea4fc755d1363a92f;
+    address constant CBBTC = 0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf;
+    address constant UNI_ROUTER = 0x2626664c2603336E57B271c5C0b26F421741e481;
+    address constant AERO_ROUTER = 0x698Cb2b6dd822994581fEa6eA4Fc755d1363A92F;
 
     string constant RPC = "https://base-rpc.publicnode.com";
 
