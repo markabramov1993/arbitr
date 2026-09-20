@@ -1,0 +1,39 @@
+name: ProofRoute MVP Validate
+on:
+  push:
+    branches: [earn/proofroute-mvp]
+    paths:
+      - 'earn/germany-ideathon/mvp/**'
+      - '.github/workflows/proofroute-mvp-validate.yml'
+  pull_request:
+    paths:
+      - 'earn/germany-ideathon/mvp/**'
+      - '.github/workflows/proofroute-mvp-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Unit tests
+        working-directory: earn/germany-ideathon/mvp
+        run: python -m unittest -v
+      - name: Deterministic demo
+        working-directory: earn/germany-ideathon/mvp
+        run: python demo.py | tee /tmp/proofroute-demo.json
+      - name: Validate demo output
+        run: |
+          python - <<'PY'
+          import json
+          data=json.load(open('/tmp/proofroute-demo.json'))
+          assert data['authorization']['authorized'] is True
+          assert data['rejected_intent']['passed'] is False
+          assert len(data['receipt']['receipt_hash']) == 64
+          print('ProofRoute demo validation: PASS')
+          PY
