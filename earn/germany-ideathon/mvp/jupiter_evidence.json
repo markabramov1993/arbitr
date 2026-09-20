@@ -1,0 +1,16 @@
+{
+  "captured_at": "2026-09-20T11:32:42Z",
+  "source": "https://api.jup.ag/swap/v1/quote",
+  "inputMint": "So11111111111111111111111111111111111111112",
+  "outputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "inAmount": "100000000",
+  "outAmount": "10825722",
+  "otherAmountThreshold": "10771594",
+  "slippageBps": 50,
+  "priceImpactPct": "0",
+  "contextSlot": 448719060,
+  "routeSteps": 1,
+  "evidenceHash": "3d6e1249ca9d42d98d0945e1b53a0c94163550d69ab4c0f8ec02fa6871b9da96",
+  "read_only": true,
+  "action_run": "https://github.com/markabramov1993/arbitr/actions/runs/35508130762"
+}

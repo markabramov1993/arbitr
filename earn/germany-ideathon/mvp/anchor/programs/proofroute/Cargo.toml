@@ -1,0 +1,19 @@
+[package]
+name = "proofroute"
+version = "0.1.0"
+edition = "2021"
+description = "ProofRoute Anchor MVP program"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "proofroute"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+
+[dependencies]
+anchor-lang = "0.31.1"
