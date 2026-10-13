@@ -1,0 +1,28 @@
+name: Mermail Bounty Ops Validate
+
+on:
+  push:
+    branches:
+      - earn/superteam-mermail-bounty-ops
+    paths:
+      - "earn/superteam-mermail-bounty-ops/**"
+      - ".github/workflows/mermail-bounty-ops-validate.yml"
+  pull_request:
+    paths:
+      - "earn/superteam-mermail-bounty-ops/**"
+      - ".github/workflows/mermail-bounty-ops-validate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Mermail community skill package
+        run: python3 earn/superteam-mermail-bounty-ops/mermail-bounty-ops/scripts/validate_skill.py
