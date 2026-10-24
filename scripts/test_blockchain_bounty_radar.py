@@ -11,6 +11,7 @@ from blockchain_bounty_radar import (
     is_trap_repo,
     render_report,
     source_issue,
+    superteam_hits_from_html,
     trap_reason,
     Hit,
     Rejection,
@@ -170,6 +171,26 @@ class ReportTests(unittest.TestCase):
             ]
         )
         self.assertEqual([h.url for h in uniq], ["https://b", "https://a"])
+
+
+class SuperteamTests(unittest.TestCase):
+    def test_rejects_sitewide_prize_total(self):
+        html = (
+            "All Content Design Dev Other USD Total Value Earned "
+            "Opportunities Listed Are you a dev? We have prizes worth "
+            "$319,000+ for you. Submit to any sidetrack and stand to win."
+        )
+        self.assertEqual(
+            superteam_hits_from_html("https://superteam.fun/earn/bounties", html),
+            [],
+        )
+
+    def test_accepts_individual_bounty_amount(self):
+        hits = superteam_hits_from_html(
+            "https://superteam.fun/earn/listing/example",
+            "<h1>Developer bounty</h1><p>Reward: $5,000 for the accepted SDK.</p>",
+        )
+        self.assertEqual([hit.amount for hit in hits], [5000.0])
 
 
 if __name__ == "__main__":

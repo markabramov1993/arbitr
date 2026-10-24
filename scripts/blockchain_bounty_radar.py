@@ -82,6 +82,10 @@ SUPERTEAM_URLS = (
     "https://superteam.fun/earn/skill/blockchain",
 )
 
+SUPERTEAM_AGGREGATE_RE = re.compile(
+    r"(?i)(?:prizes? worth|stand to win from|total value earned|opportunities listed)"
+)
+
 
 @dataclass(frozen=True)
 class Rejection:
@@ -226,6 +230,22 @@ def dedupe_hits(hits: Iterable[Hit]) -> list[Hit]:
     return uniq
 
 
+def superteam_hits_from_html(url: str, html: str) -> list[Hit]:
+    plain = re.sub(r"<[^>]+>", " ", html)
+    plain = re.sub(r"\s+", " ", plain)
+    hits: list[Hit] = []
+    for match in re.finditer(
+        r"(?i)(?:bounty|reward|prize)[^$]{0,80}\$\s*([0-9][0-9,]*(?:\.\d+)?)",
+        plain,
+    ):
+        amount = float(match.group(1).replace(",", ""))
+        context = plain[max(0, match.start() - 100) : min(len(plain), match.end() + 220)]
+        if amount < MIN_NOMINAL or SUPERTEAM_AGGREGATE_RE.search(context):
+            continue
+        hits.append(Hit("Superteam", amount, url, context[:420], "DISCOVERY"))
+    return hits
+
+
 def render_report(
     *,
     now: str,
@@ -289,19 +309,7 @@ def scan_superteam() -> tuple[list[Hit], list[str]]:
             req = urllib.request.Request(url, headers={"user-agent": USER_AGENT})
             with urllib.request.urlopen(req, timeout=20) as resp:
                 text = resp.read().decode("utf-8", "ignore")
-            plain = re.sub(r"<[^>]+>", " ", text)
-            plain = re.sub(r"\s+", " ", plain)
-            for match in re.finditer(
-                r"(?i)(?:bounty|reward|prize)[^$]{0,80}\$\s*([0-9][0-9,]*(?:\.\d+)?)",
-                plain,
-            ):
-                amount = float(match.group(1).replace(",", ""))
-                if amount < MIN_NOMINAL:
-                    continue
-                start = max(0, match.start() - 100)
-                end = min(len(plain), match.end() + 220)
-                snippet = plain[start:end][:420]
-                hits.append(Hit("Superteam", amount, url, snippet, "DISCOVERY"))
+            hits.extend(superteam_hits_from_html(url, text))
         except Exception as exc:  # noqa: BLE001 - radar must continue on source failure
             errors.append(f"- Superteam fetch failed: {url}: {exc}")
     return hits, errors

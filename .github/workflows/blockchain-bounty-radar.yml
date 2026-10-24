@@ -40,7 +40,6 @@ jobs:
           python3 scripts/blockchain_bounty_radar.py | tee bounty-radar.md
 
       - name: Create/update high-value radar alert
-        if: steps.scan.outputs.high == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -50,7 +49,11 @@ jobs:
           TITLE='[RADAR] High-value blockchain bounty discovery'
           BODY=$(cat bounty-radar.md)
           NUM=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
-          if [ -n "$NUM" ]; then
+          if [ "${{ steps.scan.outputs.high }}" != 'true' ]; then
+            if [ -n "$NUM" ]; then
+              gh issue close "$NUM" --repo "$GITHUB_REPOSITORY" --comment 'No qualifying high-value discoveries remain in the latest radar pass.'
+            fi
+          elif [ -n "$NUM" ]; then
             gh issue edit "$NUM" --repo "$GITHUB_REPOSITORY" --body "$BODY"
           else
             gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
